@@ -1,90 +1,91 @@
-# Frontend — agent notes
+# 前端 — 开发规范
 
-This is the React SPA for Document Copilot. Read [../AGENTS.md](../AGENTS.md) first — universal building rules live there. This file adds frontend-specific conventions.
+这是 Document Copilot 的 React SPA。请先阅读 [../AGENTS.md](../AGENTS.md)——通用构建规范在那里。本文件补充前端特有的约定。
 
-## Stack
+## 技术栈
 
-- **Plain React SPA** (Vite + TypeScript, strict). **Not Next.js** — do not suggest Next, SSR, server components, or file-based routing.
-- **Tailwind CSS** for styling. No CSS modules, styled-components, Emotion, or `.module.css` files for component styles. Global theme tokens live in `src/index.css`.
-- **shadcn/ui** for UI primitives. Add components with `pnpm dlx shadcn@latest add <name>` — don't hand-roll what shadcn already ships.
-- **React Router** for routing.
-- **`@supabase/supabase-js`** for auth (email only — no Google sign-in, no SSO providers).
+- **纯 React SPA**（Vite + TypeScript，严格模式）。**不是 Next.js** —— 不要提议 Next、SSR、服务端组件或基于文件的路由。
+- **Tailwind CSS** 负责样式。不使用 CSS modules、styled-components、Emotion 或 `.module.css` 文件编写组件样式。全局主题变量放在 `src/index.css`。
+- **shadcn/ui** 提供 UI 基础组件。用 `pnpm dlx shadcn@latest add <name>` 添加组件 —— 不要手写 shadcn 已经提供的东西。
+- **React Router** 负责路由。
+- **自建 `src/auth/` 模块**处理认证（邮箱 + 密码，对接后端的 JWT 接口 —— 不使用第三方认证 SDK，不接 OAuth 提供方）。
 
-## Package manager
+## 包管理器
 
-**`pnpm` only.** Do not use `npm install` or `yarn add`. The lockfile is `pnpm-lock.yaml`. If you see `package-lock.json` or `yarn.lock` appear, that's a bug — delete it.
+**只用 `pnpm`。** 不要用 `npm install` 或 `yarn add`。锁文件是 `pnpm-lock.yaml`。如果出现 `package-lock.json` 或 `yarn.lock`，那是 bug —— 直接删掉。
 
-**Minimum release age: 7 days.** Configured via `.npmrc` (`minimum-release-age=10080` minutes). pnpm will refuse to install any package version published less than 7 days ago. This defends against typosquat / compromised-release attacks where a malicious version of a popular package goes live and gets pulled within hours.
+**最低发布时长：7 天。** 通过 `.npmrc` 配置（`minimum-release-age=10080` 分钟）。pnpm 会拒绝安装发布时间不足 7 天的版本。这用于防御域名仿冒 / 发布包投毒攻击 —— 这类攻击中，热门包的恶意版本上线后几小时内就会被大量拉取。
 
-If a fresh package is genuinely required (e.g. urgent security fix in a dep we already use), override per-install and justify in the commit message — don't lower the global threshold.
+如果确实需要某个刚发布的包（例如我们已在使用的依赖发布了紧急安全修复），请针对单次安装做覆盖，并在提交信息中说明理由 —— 不要调低全局阈值。
 
-## Dependency policy
+## 依赖策略
 
-See universal policy in [../AGENTS.md](../AGENTS.md). Frontend-specific:
+通用策略见 [../AGENTS.md](../AGENTS.md)。前端补充如下：
 
-- **HTTP:** use the native `fetch` API through a thin client in `src/lib/http.ts` and the `api` singleton in `src/lib/api.ts`. **No axios, ky, got, superagent, redaxios.**
-- **Dates:** use native `Date` and `Intl.DateTimeFormat`. No moment, dayjs, date-fns unless genuinely needed.
-- **Utilities:** use native `Array` / `Object` / `Map` methods. No lodash, ramda.
-- **State:** `useState` / `useReducer` / `useContext` first. Only reach for external state libraries when the pain is real.
-- **Forms:** native `<form>` + `FormData` first.
-- **Validation:** only add a schema library when we actually need runtime validation at boundaries.
-- **UI components:** shadcn primitives via `pnpm dlx shadcn@latest add <name>`. Don't hand-roll what shadcn already ships.
+- **HTTP：** 通过 `src/lib/http.ts` 中的轻量客户端和 `src/lib/api.ts` 中的 `api` 单例使用原生 `fetch` API。**不用 axios、ky、got、superagent、redaxios。**
+- **日期：** 使用原生 `Date` 和 `Intl.DateTimeFormat`。除非确实需要，否则不用 moment、dayjs、date-fns。
+- **工具函数：** 使用原生 `Array` / `Object` / `Map` 方法。不用 lodash、ramda。
+- **状态：** 优先 `useState` / `useReducer` / `useContext`。只有当确实痛的时候才引入外部状态库。
+- **表单：** 优先原生 `<form>` + `FormData`。
+- **校验：** 只有当确实需要在边界处做运行时校验时，才引入 schema 库。
+- **UI 组件：** 通过 `pnpm dlx shadcn@latest add <name>` 使用 shadcn 基础组件。不要手写 shadcn 已经提供的东西。
 
-Before adding a package, check:
+添加包之前，先确认：
 
-1. Is there a native browser or TS/JS API that does this?
-2. Does shadcn/ui already cover it?
-3. Is it small, well-maintained, and worth the maintenance cost?
+1. 是否有原生的浏览器或 TS/JS API 可以做到？
+2. shadcn/ui 是否已经覆盖了这个需求？
+3. 它是否体积小巧、维护良好，值得付出维护成本？
 
-If yes to (3), add it — but flag the decision in the commit message.
+如果第 (3) 点成立，那就加上 —— 但要在提交信息中说明这个决定。
 
-## Layout (to be created during build)
+## 目录结构（构建过程中创建）
 
 ```text
 frontend/
 ├── src/
-│   ├── components/        # App components. shadcn primitives under components/ui/
-│   ├── lib/               # Framework-agnostic helpers (http, api, auth, supabase, env)
-│   ├── pages/             # Route-level components
-│   ├── App.tsx            # Router
+│   ├── components/        # 应用组件。shadcn 基础组件放在 components/ui/ 下
+│   ├── auth/              # 登录/注册接口调用（api.ts）、token 存储与刷新（auth.ts）、类型（types.ts）
+│   ├── lib/               # 与框架无关的工具（http、api、env）
+│   ├── pages/             # 路由级组件
+│   ├── App.tsx            # 路由
 │   ├── main.tsx
-│   └── index.css          # Tailwind directives + global theme tokens
+│   └── index.css          # Tailwind 指令 + 全局主题变量
 ├── index.html
 ├── vite.config.ts
 ├── tsconfig.json
 └── package.json
 ```
 
-Keep imports consistent with the `@/*` alias (e.g. `@/lib/api`, `@/components/ui/button`).
+保持 `import` 一致使用 `@/*` 别名（例如 `@/lib/api`、`@/components/ui/button`）。
 
-## Code style (frontend-specific)
+## 代码风格（前端特有）
 
-- **TypeScript strict.** No `any` unless there's no alternative; prefer `unknown` and narrow.
-- **Small, composable functions and components** over clever abstractions. Three similar lines > a premature generic.
-- **One component = one file.** Components stay small enough to fit on one screen.
-- **Tailwind classes inline.** No CSS modules, styled-components, Emotion, or `.module.css` for component styles. Global tokens live in `src/index.css`.
+- **TypeScript 严格模式。** 除非别无选择，否则不用 `any`；优先使用 `unknown` 并做类型收窄。
+- **小而可组合的函数与组件**胜过巧妙的抽象。三行相似的代码 > 一个过早的泛型。
+- **一个组件一个文件。** 组件要保持在一屏之内读完的体量。
+- **Tailwind 类名内联。** 不使用 CSS modules、styled-components、Emotion 或 `.module.css` 编写组件样式。全局变量放在 `src/index.css`。
 
-## Configuration
+## 配置
 
-- All env reads go through a single `src/lib/env.ts` module that validates required vars at boot. Never read `import.meta.env.X` directly in components.
-- Env vars are prefixed `VITE_` (Vite convention). Anything not prefixed is not exposed to the client.
+- 所有环境变量读取都通过单一的 `src/lib/env.ts` 模块，它在启动时校验必需的变量。绝不在组件中直接读 `import.meta.env.X`。
+- 环境变量以 `VITE_` 为前缀（Vite 约定）。没有该前缀的变量不会暴露给客户端。
 
-## Backend integration
+## 后端对接
 
-- Talks to a separate Python backend over JSON. URL comes from `VITE_API_BASE_URL`.
-- Always use `api.get/post/put/patch/delete` from `@/lib/api` — it handles base URL, JSON, Supabase bearer token, timeouts, and typed `ApiError`s (including the `isNetworkError` flag that distinguishes CORS/network from HTTP errors).
-- Auth is Supabase email. The bearer token is injected automatically via the `api` client; never thread tokens through component props.
+- 通过 JSON 与独立的 Python 后端通信。URL 来自 `VITE_API_BASE_URL`。
+- 始终使用 `@/lib/api` 中的 `api.get/post/put/patch/delete` —— 它负责 base URL、JSON、JWT bearer token、超时以及带类型的 `ApiError`（包含用于区分 CORS/网络错误与 HTTP 错误的 `isNetworkError` 标志）。
+- 认证方式为邮箱 + 密码，换取后端签发的 JWT（`POST /auth/login`）。bearer token 由 `api` 客户端自动注入；绝不要通过组件 props 逐层传递 token。遇到 `401` 时，`src/auth/` 模块会刷新 access token，失败则回退到登录路由。
 
-## Testing
+## 测试
 
-**No frontend tests.** Do not write `*.test.ts` / `*.test.tsx` files or introduce a test runner. We verify the frontend manually in the browser plus `pnpm tsc --noEmit` and `pnpm lint`. If you find yourself reaching for vitest, Playwright, or Cypress — stop. That's not what this project does. Correctness for shared logic comes from keeping it simple and well-typed, not from a test suite.
+**不写前端测试。** 不要创建 `*.test.ts` / `*.test.tsx` 文件，也不要引入测试运行器。我们通过浏览器手动验证前端，加上 `pnpm tsc --noEmit` 和 `pnpm lint`。如果你发现自己想用 vitest、Playwright 或 Cypress —— 停下来。这不是本项目要做的事。共享逻辑的正确性靠的是保持简单和良好的类型，而不是靠测试套件。
 
-## Anti-patterns (rejected)
+## 反模式（禁止事项）
 
-- Reading `import.meta.env.X` directly outside `lib/env.ts`.
-- Importing an HTTP library when `fetch` would do.
-- Mixing client state libraries (Zustand + Jotai + Redux) for one project.
-- `any` annotations to silence the type-checker.
-- Custom CSS files / styled-components alongside Tailwind.
-- Re-implementing a shadcn primitive by hand.
-- Reaching for Next.js, SSR, or any framework that requires a Node server in front of the SPA.
+- 在 `lib/env.ts` 之外直接读取 `import.meta.env.X`。
+- 明明 `fetch` 就够用，却引入 HTTP 库。
+- 在一个项目里混用多个客户端状态库（Zustand + Jotai + Redux）。
+- 用 `any` 注解来屏蔽类型检查错误。
+- 在 Tailwind 之外另起自定义 CSS 文件 / styled-components。
+- 手写重复实现 shadcn 已有的基础组件。
+- 引入 Next.js、SSR，或任何需要在 SPA 前面加 Node 服务器的框架。

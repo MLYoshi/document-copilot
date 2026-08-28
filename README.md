@@ -10,16 +10,17 @@ Full brief: [docs/client-brief.md](docs/client-brief.md)
 
 ## Stack
 
-| Layer              | Choice                                               |
-| ------------------ | ---------------------------------------------------- |
-| Backend            | Python + FastAPI                                     |
-| Frontend           | Vite + React SPA + TypeScript                        |
-| Database           | Supabase Postgres (users, chats, documents, chunks)  |
-| Migrations         | SQLAlchemy models + Alembic                          |
-| Retrieval          | Supabase `pgvector` + Postgres full-text search      |
-| Auth               | Supabase Auth (email only)                           |
-| Hosting            | Railway                                              |
-| LLM + embeddings   | OpenAI                                               |
+| Layer            | Choice                                                             |
+| ---------------- | ------------------------------------------------------------------ |
+| Backend          | Python + FastAPI                                                   |
+| Frontend         | Vite + React SPA + TypeScript                                      |
+| Database         | PostgreSQL + pgvector, self-managed (users, chats, documents, chunks) |
+| Migrations       | SQLAlchemy models + Alembic                                        |
+| Retrieval        | `pgvector` semantic search + Postgres full-text search              |
+| Auth             | FastAPI JWT (email + password)                                     |
+| Cache            | Redis (cache / session state)                                      |
+| Hosting          | Railway (frontend + backend + PostgreSQL)                          |
+| LLM + embeddings | OpenAI                                                             |
 
 ## Repo layout
 
@@ -29,7 +30,8 @@ document-copilot/
 ├── README.md           # this file
 ├── data/               # local corpus + download script (payloads gitignored)
 ├── docs/
-│   └── client-brief.md # the client one-pager
+│   ├── architecture.zh-CN.md # target architecture (source of truth)
+│   └── client-brief.md       # the client one-pager
 ├── backend/            # FastAPI service
 └── frontend/           # React SPA (Vite)
 ```
@@ -45,14 +47,13 @@ Install these before setting up `backend/` or `frontend/`:
 | [Node.js](https://nodejs.org/) | 20+ (LTS) | Frontend toolchain | nodejs.org or `nvm install --lts` |
 | [pnpm](https://pnpm.io/installation) | latest | Frontend package manager | `corepack enable && corepack prepare pnpm@latest --activate` |
 
-You also need accounts/keys for external services once the app is wired up. Start with [docs/guides/supabase-setup.md](docs/guides/supabase-setup.md) (account + project), then create an [OpenAI API key](https://platform.openai.com/api-keys) when the LLM layer is wired up.
+You also need a PostgreSQL instance with the `pgvector` extension and an OpenAI API key. Start with the [PostgreSQL + pgvector](docs/guides/backend-setup.zh-CN.md#postgresql--pgvector-docker-compose) section of the backend guide, then create an [OpenAI API key](https://platform.openai.com/api-keys) when the LLM layer is wired up.
 
 ## Running locally
 
 To be added during the build. Setup guides:
 
-- [Supabase](docs/guides/supabase-setup.md) — account, hosted project (dashboard or CLI)
-- [Backend](docs/guides/backend-setup.md)
+- [Backend](docs/guides/backend-setup.zh-CN.md) — includes PostgreSQL + pgvector setup (Docker Compose or managed)
 - [Frontend](docs/guides/frontend-setup.md)
 
 ## Sample SEC data

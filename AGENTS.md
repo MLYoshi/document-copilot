@@ -6,11 +6,12 @@ This file is the source of truth for any coding agent (Claude Code, Cursor, Code
 
 - **Backend:** Python + FastAPI
 - **Frontend:** Vite + React SPA + TypeScript
-- **Database:** Supabase Postgres (users, chats, source documents, chunks)
+- **Database:** PostgreSQL + pgvector, self-managed (users, chats, source documents, chunks)
 - **Migrations:** SQLAlchemy models + Alembic from the backend
-- **Retrieval:** Supabase `pgvector` + Postgres full-text search
-- **Auth:** Supabase Auth
-- **Hosting:** Railway (backend service + frontend service)
+- **Retrieval:** `pgvector` semantic search + Postgres full-text search, fused with RRF
+- **Auth:** FastAPI JWT (issued and verified by the backend)
+- **Cache:** Redis (cache / session state)
+- **Hosting:** Railway (frontend service + backend service + PostgreSQL)
 - **LLM + embeddings:** OpenAI
 
 Stack is locked unless explicitly changed. Don't propose alternatives without a stated reason.
@@ -34,7 +35,7 @@ document-copilot/
 OK to depend on:
 
 - Things that are genuinely hard to get right (HTTP clients, ASGI servers, SQL drivers, parsers, LLM SDKs, ORM, migrations, auth SDKs).
-- The declared stack (FastAPI, React, Vite, Supabase clients, OpenAI SDK, etc.).
+- The declared stack (FastAPI, React, Vite, SQLAlchemy/asyncpg, OpenAI SDK, etc.).
 
 Not OK:
 
