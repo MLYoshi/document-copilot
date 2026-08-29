@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     # JWT auth
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
+    jwt_access_token_expire_minutes: int = 30
+    jwt_refresh_token_expire_days: int = 30
 
     # OpenAI (LLM / embeddings)
     openai_api_key: str | None = None
@@ -27,6 +29,15 @@ class Settings(BaseSettings):
     def _not_empty(cls, value: str, info) -> str:
         if not value.strip():
             raise ValueError(f"{info.field_name} must not be empty")
+        return value
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def _sufficient_key_length(cls, value: str) -> str:
+        # RFC 7518 recommends >= 32 bytes for HS256; shorter keys are rejected
+        # at startup so a placeholder secret never reaches production.
+        if len(value.encode()) < 32:
+            raise ValueError("jwt_secret_key must be at least 32 bytes (e.g. `openssl rand -hex 32`)")
         return value
 
     @property

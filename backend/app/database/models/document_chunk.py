@@ -1,4 +1,5 @@
 import uuid
+from typing import TYPE_CHECKING
 
 from pgvector.sqlalchemy import VECTOR
 from sqlalchemy import Computed, ForeignKey, Index, Integer, Text, text
@@ -6,6 +7,9 @@ from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.database.base import Base
+
+if TYPE_CHECKING:
+    from app.database.models.source_document import SourceDocument
 
 EMBEDDING_DIMENSIONS = 1536  # keep in sync with settings.openai_embedding_dimensions
 

@@ -11,7 +11,7 @@
 - 测试使用 `pytest`
 - SQLAlchemy（`asyncpg` 驱动）+ Alembic 迁移，用于数据库访问与 schema 变更
 - OpenAI SDK 用于 LLM 与 embeddings
-- `pyjwt` 用于 JWT 签发/校验，`passlib` + `bcrypt` 用于密码哈希
+- `pyjwt` 用于 JWT 签发/校验，`bcrypt` 直接用于密码哈希（passlib 已停止维护且与 bcrypt 5.0 不兼容，勿重新引入）
 - `pgvector` 用于语义检索，Postgres 全文检索用于关键词检索。混合检索应分别执行向量查询与全文查询，再用 Reciprocal Rank Fusion（RRF）在 Python 中融合排序结果。
 - `structlog` 用于日志
 - `uv` 用于依赖与项目管理
