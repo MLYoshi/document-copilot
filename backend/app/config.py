@@ -24,6 +24,10 @@ class Settings(BaseSettings):
     # CORS
     allowed_origins: str = "http://localhost:5173"
 
+    # Ingest
+    # Shared corpus documents are owned by this virtual system user
+    corpus_owner_email: str = "corpus@system.local"
+
     @field_validator("database_url", "jwt_secret_key")
     @classmethod
     def _not_empty(cls, value: str, info) -> str:

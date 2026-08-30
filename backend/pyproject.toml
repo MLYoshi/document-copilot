@@ -6,6 +6,7 @@ dependencies = [
     "alembic",
     "asyncpg",
     "bcrypt==5.0.0",
+    "beautifulsoup4==4.15.0",
     "email-validator",
     "fastapi",
     "greenlet==3.5.5",
@@ -44,6 +45,7 @@ dev = [
 ignore = ["B008"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 markers = [
     "integration: tests that need a real PostgreSQL or OpenAI credentials",
 ]

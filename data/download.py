@@ -27,24 +27,34 @@ COMPANY_CIKS = {
 }
 
 
+def _fetch(url: str, headers: dict[str, str], timeout: int) -> bytes:
+    # SEC traffic over this network occasionally drops mid-handshake; retry
+    # instead of restarting the whole download from scratch
+    last_error: Exception | None = None
+    for attempt in range(3):
+        try:
+            req = request.Request(url, headers=headers)
+            with request.urlopen(req, timeout=timeout) as response:
+                return response.read()
+        except (request.URLError, TimeoutError, OSError) as exc:
+            last_error = exc
+            time.sleep(2**attempt)
+    raise last_error
+
+
 def get_json(url: str) -> dict:
-    req = request.Request(
-        url, headers={"Accept": "application/json", "User-Agent": USER_AGENT}
+    body = _fetch(
+        url, {"Accept": "application/json", "User-Agent": USER_AGENT}, timeout=30
     )
-    with request.urlopen(req, timeout=30) as response:
-        return json.loads(response.read().decode("utf-8"))
+    return json.loads(body.decode("utf-8"))
 
 
 def get_bytes(url: str) -> bytes:
-    req = request.Request(
+    return _fetch(
         url,
-        headers={
-            "Accept": "text/html,application/xhtml+xml,application/xml",
-            "User-Agent": USER_AGENT,
-        },
+        {"Accept": "text/html,application/xhtml+xml,application/xml", "User-Agent": USER_AGENT},
+        timeout=60,
     )
-    with request.urlopen(req, timeout=60) as response:
-        return response.read()
 
 
 def download_filings() -> dict:
