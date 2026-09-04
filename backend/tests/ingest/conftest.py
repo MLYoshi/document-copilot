@@ -1,4 +1,5 @@
 import json
+import uuid
 from pathlib import Path
 
 import pytest
@@ -62,3 +63,75 @@ def downloads_dir(tmp_path: Path) -> Path:
         json.dumps({"filings": FILINGS}), encoding="utf-8"
     )
     return tmp_path
+
+
+class FakeResult:
+    """Stand-in for the Result returned by AsyncSession.execute."""
+
+    def __init__(self, value) -> None:
+        self._value = value
+
+    def scalar_one_or_none(self):
+        return self._value
+
+    def scalar_one(self):
+        return self._value
+
+    def scalars(self):
+        return self
+
+    def all(self):
+        return self._value if isinstance(self._value, list) else [self._value]
+
+
+class FakeSession:
+    """Minimal AsyncSession stand-in: no database, no network.
+
+    Select outcomes come from a scripted queue consumed in call order;
+    execute() falls back to an empty result for statements the caller never
+    looks at (DELETE, seed selects). add() assigns server-side PK defaults
+    eagerly, mirroring SQLAlchemy's autoflush before the next execute().
+    """
+
+    def __init__(self, results=()) -> None:
+        self._results = list(results)
+        self.added: list = []
+        self.statements: list = []
+        self.commits = 0
+        self.rollbacks = 0
+
+    def queue(self, *results) -> None:
+        self._results.extend(results)
+
+    async def execute(self, stmt):
+        self.statements.append(stmt)
+        if self._results:
+            return FakeResult(self._results.pop(0))
+        return FakeResult(None)
+
+    def add(self, obj) -> None:
+        if getattr(obj, "id", None) is None:
+            obj.id = uuid.uuid4()
+        self.added.append(obj)
+
+    async def commit(self) -> None:
+        self.commits += 1
+
+    async def rollback(self) -> None:
+        self.rollbacks += 1
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return False
+
+
+@pytest.fixture
+def fake_session() -> FakeSession:
+    return FakeSession()
+
+
+@pytest.fixture
+def fake_session_factory(fake_session: FakeSession):
+    return lambda: fake_session
