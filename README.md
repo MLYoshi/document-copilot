@@ -20,7 +20,7 @@ Full brief: [docs/client-brief.md](docs/client-brief.md)
 | Auth             | FastAPI JWT (email + password)                                     |
 | Cache            | Redis (cache / session state)                                      |
 | Hosting          | Railway (frontend + backend + PostgreSQL)                          |
-| LLM + embeddings | OpenAI                                                             |
+| LLM + embeddings | OpenAI SDK via the OpenRouter gateway                              |
 
 ## Repo layout
 
@@ -47,7 +47,7 @@ Install these before setting up `backend/` or `frontend/`:
 | [Node.js](https://nodejs.org/) | 20+ (LTS) | Frontend toolchain | nodejs.org or `nvm install --lts` |
 | [pnpm](https://pnpm.io/installation) | latest | Frontend package manager | `corepack enable && corepack prepare pnpm@latest --activate` |
 
-You also need a PostgreSQL instance with the `pgvector` extension and an OpenAI API key. Start with the [PostgreSQL + pgvector](docs/guides/backend-setup.zh-CN.md#postgresql--pgvector-docker-compose) section of the backend guide, then create an [OpenAI API key](https://platform.openai.com/api-keys) when the LLM layer is wired up.
+You also need a PostgreSQL instance with the `pgvector` extension and an OpenRouter API key. Start with the [PostgreSQL + pgvector](docs/guides/backend-setup.zh-CN.md#postgresql--pgvector-docker-compose) section of the backend guide, then create an [OpenRouter API key](https://openrouter.ai/keys) when the LLM layer is wired up.
 
 ## Running locally
 

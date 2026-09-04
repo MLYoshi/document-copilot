@@ -21,7 +21,7 @@ flowchart LR
         db[(PostgreSQL<br/>users、chats、documents、chunks<br/>pgvector + 全文检索)]
     end
 
-    openai[OpenAI<br/>LLM + 嵌入模型]
+    openrouter[OpenRouter 网关<br/>LLM + 嵌入模型]
     corpus[SEC 披露文件语料]
     ingestion[摄入流水线<br/>下载、解析、分块、向量化]
 
@@ -31,11 +31,12 @@ flowchart LR
     browser -->|聊天请求 + Bearer JWT| backend
     backend -->|检索段落<br/>持久化会话与引用| db
     backend -->|缓存| redis
-    backend -->|生成有据可依的答案| openai
+    backend -->|查询向量化| openrouter
+    backend -->|生成有据可依的答案| openrouter
     backend -->|流式返回答案与引用| browser
 
     corpus --> ingestion
-    ingestion -->|创建嵌入向量| openai
+    ingestion -->|创建嵌入向量| openrouter
     ingestion -->|存储文档与分块| db
 ```
 
@@ -54,7 +55,7 @@ flowchart LR
                            │
           ┌────────────────┼────────────────┐
           ↓                ↓                ↓
-      PostgreSQL         Redis            OpenAI
+      PostgreSQL         Redis            OpenRouter
           │
       ┌───┴───────────┐
       │               │
@@ -101,7 +102,7 @@ PostgreSQL + pgvector
 - FastAPI + Uvicorn
 - Pydantic v2 + pydantic-settings
 - PydanticAI 负责类型化的 LLM 编排
-- OpenAI SDK 负责生成与嵌入
+- OpenAI SDK 负责生成与嵌入，统一通过 OpenRouter 网关调用（`base_url` 指向 OpenRouter，而非 OpenAI 直连）
 - SQLAlchemy（asyncpg 驱动）负责数据库访问
 - SQLAlchemy 模型 + Alembic 迁移负责 schema 管理
 - PostgreSQL `pgvector` 负责语义检索
@@ -117,9 +118,9 @@ PostgreSQL + pgvector
 
 ## 系统边界
 
-前端负责用户交互、本地 UI 状态，以及把已认证用户的请求发送给后端。它持有用户自己的 JWT access token，绝不能持有任何特权凭据、运行检索逻辑，或直接调用 OpenAI。
+前端负责用户交互、本地 UI 状态，以及把已认证用户的请求发送给后端。它持有用户自己的 JWT access token，绝不能持有任何特权凭据、运行检索逻辑，或直接调用 OpenRouter。
 
-后端负责注册/登录、JWT 签发与校验、密码哈希、请求鉴权、检索、提示词构建、LLM 执行、引用校验、流式响应和持久化存储。它持有数据库连接串和 OpenAI key 等全部特权凭据。
+后端负责注册/登录、JWT 签发与校验、密码哈希、请求鉴权、检索、提示词构建、LLM 执行、引用校验、流式响应和持久化存储。它持有数据库连接串和 OpenRouter key 等全部特权凭据。
 
 PostgreSQL 是唯一的事实存储。访问全部经由后端的 SQLAlchemy 连接池完成——浏览器和前端永远不直接连数据库。
 
@@ -255,7 +256,10 @@ backend/app/
 ├── api/
 │   ├── auth.py                 # 注册、登录、刷新、登出路由
 │   ├── chat.py                 # 聊天线程与流式的 FastAPI 路由
-│   └── documents.py            # 文档与摄入相关路由
+│   └── documents.py            # 文档与分块的只读查询路由（绝不触发摄入）
+├── core/
+│   ├── config.py               # settings 单例，环境变量的唯一来源
+│   └── embeddings.py           # 嵌入客户端，离线入库与线上检索共用同一份
 ├── auth/
 │   ├── dependencies.py         # get_current_user 依赖
 │   ├── jwt.py                  # JWT 签发与校验
@@ -272,7 +276,7 @@ backend/app/
 ├── retrieval/
 │   ├── queries.py              # pgvector 与全文检索 SQL 查询
 │   ├── fusion.py               # 混合检索的倒数排名融合（RRF）
-│   └── retriever.py            # 从查询到原文段落的检索逻辑
+│   └── retriever.py            # 从查询到原文段落的检索逻辑（查询向量化用 core.embeddings）
 ├── grounding/
 │   └── validator.py            # 确保引用能对应到检索到的段落
 ├── database/
@@ -332,7 +336,7 @@ Document Copilot 使用混合检索。
 检索链路：
 
 ```text
-OpenAI Embedding
+OpenRouter 嵌入（查询向量化）
         ↓
 PostgreSQL + pgvector
         ↓
@@ -341,7 +345,7 @@ semantic search
 
 步骤：
 
-1. 用配置好的 OpenAI 嵌入模型对用户查询做向量化。
+1. 用配置好的嵌入模型（经 OpenRouter）对用户查询做向量化。
 2. 用 `pgvector` 对 `document_chunks.embedding` 做语义检索。
 3. 用 Postgres 全文检索对 `document_chunks.search_vector` 做字面量检索。
 4. 在 Python 中用倒数排名融合（Reciprocal Rank Fusion）合并两个排序列表。
@@ -447,7 +451,7 @@ PostgreSQL
 普通的表和普通索引应尽量体现在 SQLAlchemy 模型中。以下内容应在迁移里用 `op.execute()` 显式书写，或通过仔细审阅的 Alembic 操作完成：
 
 - `create extension if not exists vector`
-- `vector(2048)` 嵌入列（如果 SQLAlchemy 的类型渲染不够用）
+- `vector(1024)` 嵌入列（如果 SQLAlchemy 的类型渲染不够用；宽度须低于 pgvector 索引的 2000 维上限）
 - 生成的 `tsvector` 列
 - 用于向量检索的 HNSW 索引
 - 用于全文检索和 JSON 元数据的 GIN 索引
@@ -502,8 +506,8 @@ JWT_ALGORITHM=HS256
 OPENROUTER_API_KEY=
 OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
-EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free
-EMBEDDING_DIMENSIONS=2048
+EMBEDDING_MODEL=baai/bge-m3
+EMBEDDING_DIMENSIONS=1024
 ```
 
 这样整个系统的依赖关系非常干净：
@@ -513,10 +517,10 @@ FastAPI
  │
  ├── PostgreSQL
  ├── pgvector
- └── OpenAI
+ └── OpenRouter
 ```
 
-不要在组件、路由处理函数或 service 中直接读取环境变量。前端代码使用 `src/lib/env.ts`，后端代码使用 `app/config.py`。
+不要在组件、路由处理函数或 service 中直接读取环境变量。前端代码使用 `src/lib/env.ts`，后端代码使用 `app/core/config.py`。
 
 ## 部署形态
 
@@ -588,7 +592,7 @@ Docker Compose
 ## 非目标
 
 - 不使用 Next.js、SSR、服务端组件或前端 route handler。
-- 不从浏览器直接调用 OpenAI。
+- 不从浏览器直接调用 OpenRouter。
 - 不引入独立的托管向量数据库——pgvector 承载全部向量检索。
 - 不使用任何 BaaS 身份服务，认证完全由 FastAPI 实现。
 - 不做多租户架构。

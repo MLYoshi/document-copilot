@@ -12,7 +12,7 @@ This file is the source of truth for any coding agent (Claude Code, Cursor, Code
 - **Auth:** FastAPI JWT (issued and verified by the backend)
 - **Cache:** Redis (cache / session state)
 - **Hosting:** Railway (frontend service + backend service + PostgreSQL)
-- **LLM + embeddings:** OpenAI
+- **LLM + embeddings:** OpenAI SDK, pointed at the OpenRouter gateway (`base_url=https://openrouter.ai/api/v1`)
 
 Stack is locked unless explicitly changed. Don't propose alternatives without a stated reason.
 
@@ -53,7 +53,7 @@ Per-stack specifics live in `backend/AGENTS.md` and `frontend/AGENTS.md`.
 
 ## Configuration
 
-A single settings module is the source of truth for environment per service (`backend/app/config.py`, `frontend/lib/env.ts`). Do not call `os.getenv` / read `process.env` directly in app code. Do not call `load_dotenv` anywhere. If a third-party SDK reads env vars directly, mirror them in the settings module — don't sprinkle `setdefault` elsewhere.
+A single settings module is the source of truth for environment per service (`backend/app/core/config.py`, `frontend/lib/env.ts`). Do not call `os.getenv` / read `process.env` directly in app code. Do not call `load_dotenv` anywhere. If a third-party SDK reads env vars directly, mirror them in the settings module — don't sprinkle `setdefault` elsewhere.
 
 Fail fast on startup if required config is missing. No silent fallbacks that hide real config errors.
 

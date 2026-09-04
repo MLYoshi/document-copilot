@@ -7,7 +7,7 @@
 ```bash
 cd backend
 uv sync
-uv add fastapi uvicorn pydantic pydantic-settings httpx structlog openai pydantic-ai sqlalchemy alembic asyncpg pgvector pyjwt "passlib[bcrypt]"
+uv add fastapi uvicorn pydantic pydantic-settings httpx structlog openai pydantic-ai sqlalchemy alembic asyncpg pgvector pyjwt bcrypt
 uv add --dev pytest ruff
 ```
 
@@ -74,7 +74,7 @@ uv run alembic revision --autogenerate -m "add document tables"
 务必人工审查生成的迁移。对于 autogenerate 无法可靠推断的 Postgres 特性，需要显式补上相应操作：
 
 - `create extension if not exists vector`
-- `vector(2048)` 列（宽度由 `settings.embedding_dimensions` 决定）
+- `vector(1024)` 列（宽度由 `settings.embedding_dimensions` 决定，须低于 pgvector 索引的 2000 维上限）
 - 生成列 `tsvector`
 - HNSW 与 GIN 索引
 
