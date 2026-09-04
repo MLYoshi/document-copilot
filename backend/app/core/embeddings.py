@@ -20,10 +20,8 @@ EmbedFn = Callable[[list[str]], Awaitable[list[list[float]]]]
 
 @lru_cache
 def _client() -> AsyncOpenAI:
-    if not settings.openrouter_api_key:
-        raise RuntimeError("OPENROUTER_API_KEY is required for embeddings")
     return AsyncOpenAI(
-        api_key=settings.openrouter_api_key,
+        api_key=settings.require_openrouter_api_key(),
         base_url=settings.openrouter_base_url,
     )
 

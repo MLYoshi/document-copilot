@@ -26,6 +26,12 @@ class Settings(BaseSettings):
     embedding_model: str = "baai/bge-m3"
     embedding_dimensions: int = 1024
 
+    # Chat model used by the assistant agent (OpenRouter model slug)
+    chat_model: str = "minimax/minimax-m3:free"
+    # Hard cap on passages injected into the prompt (context size is the
+    # only real bottleneck of the pre-retrieval injection design)
+    retrieval_top_k: int = 8
+
     # CORS
     allowed_origins: str = "http://localhost:5173"
 
@@ -48,6 +54,21 @@ class Settings(BaseSettings):
         if len(value.encode()) < 32:
             raise ValueError("jwt_secret_key must be at least 32 bytes (e.g. `openssl rand -hex 32`)")
         return value
+
+    @field_validator("retrieval_top_k")
+    @classmethod
+    def _positive_top_k(cls, value: int) -> int:
+        if value < 1:
+            raise ValueError("retrieval_top_k must be >= 1")
+        return value
+
+    def require_openrouter_api_key(self) -> str:
+        # Kept optional at settings level so key-less environments can still
+        # run the fast test suite; callers that actually hit OpenRouter must
+        # go through here and fail fast with a clear error.
+        if not self.openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter calls")
+        return self.openrouter_api_key
 
     @property
     def allowed_origin_list(self) -> list[str]:
