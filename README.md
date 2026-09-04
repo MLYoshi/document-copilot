@@ -23,32 +23,38 @@
 
 ## 架构图
 
-```text
-                        ┌────────────────────────────────────────────┐
-                        │              实时聊天链路（在线）              │
- 分析师 ──浏览器──▶ React SPA（Vite + React + TS）
-                        │        │  JWT Bearer
-                        │        ▼
-                        │   FastAPI（Uvicorn, :8000）
-                        │        ├── auth/   JWT 签发/校验、密码哈希
-                        │        ├── chat/   线程/消息 + 流式编排
-                        │        ├── retrieval/  混合检索（向量 + 全文 + RRF）
-                        │        ├── grounding/  引用逐字校验
-                        │        └── assistant/  PydanticAI Agent（唯一 LLM 边界）
-                        │                 │  search_filings / read_chunks
-                        │                 ▼
-                        │            OpenRouter（LLM + Embedding）
-                        └────────────────────────────────────────────┘
+```mermaid
+flowchart TB
+    subgraph ingest["摄入链路（离线，一次性）"]
+        direction TB
+        I1["SEC EDGAR 10-K / 10-Q"] --> I2["下载"]
+        I2 --> I3["HTML 抽取 → Markdown"]
+        I3 --> I4["分块"]
+        I4 --> I5["向量化（bge-m3, 1024 维）"]
+        I5 --> I6["写入 Postgres（幂等去重）"]
+    end
 
- ┌────────────────────────────┐        ┌─────────────────────────────┐
- │    摄入链路（离线，一次性）    │        │      PostgreSQL + pgvector   │
- │ SEC EDGAR 10-K/10-Q        │        │                             │
- │   │ 下载                    │        │  users / chat_threads       │
- │   ▼ HTML 抽取 → Markdown    │ ──写库──▶  source_documents / chunks   │
- │   ▼ 分块                    │        │  (pgvector 1024 维 + tsvector)│
- │   ▼ 向量化（bge-m3）         │        └──────────┬──────────────────┘
- │   ▼ 写入 Postgres（幂等）     │                   │  在线侧检索
- └────────────────────────────┘        └──────────▶ 返回给混合检索器
+    subgraph db["PostgreSQL + pgvector"]
+        direction LR
+        D1["users / chat_threads / chat_messages"]
+        D2["source_documents / document_chunks<br/>(pgvector 1024 维 + tsvector)"]
+    end
+
+    subgraph online["实时聊天链路（在线）"]
+        direction TB
+        U["分析师"] --> FE["React SPA<br/>(Vite + React + TS)"]
+        FE -- "JWT Bearer" --> API["FastAPI（Uvicorn, :8000）"]
+        API --> AUTH["auth/<br/>JWT 签发/校验、密码哈希"]
+        API --> CHAT["chat/<br/>线程/消息 + 流式编排"]
+        CHAT --> AGENT["assistant/<br/>PydanticAI Agent（唯一 LLM 边界）"]
+        AGENT -- "search_filings / read_chunks" --> RETR["retrieval/<br/>混合检索（向量 + 全文 + RRF）"]
+        GROUND["grounding/<br/>引用逐字校验"] --> AGENT
+        AGENT --> OR["OpenRouter<br/>(LLM + Embedding)"]
+    end
+
+    I6 -- "写库" --> db
+    RETR -- "在线侧检索" --> db
+    FE -- "流式返回带引用答案" --> U
 ```
 
 两条链路通过**共享的嵌入客户端**（`backend/app/core/embeddings.py`）和**共享的 Postgres 表**衔接：离线侧写库、在线侧检索，必须用同一嵌入模型和同一向量维度（默认 `baai/bge-m3`，1024 维）。
