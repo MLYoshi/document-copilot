@@ -26,26 +26,34 @@ class Embedder(Protocol):
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
 
 
-class OpenAIEmbedder:
+class OpenRouterEmbedder:
     def __init__(self) -> None:
-        if not settings.openai_api_key:
-            raise RuntimeError("OPENAI_API_KEY is required for the ingest pipeline")
-        self._client = AsyncOpenAI(api_key=settings.openai_api_key)
+        if not settings.openrouter_api_key:
+            raise RuntimeError("OPENROUTER_API_KEY is required for the ingest pipeline")
+        self._client = AsyncOpenAI(
+            api_key=settings.openrouter_api_key,
+            base_url=settings.openrouter_base_url,
+        )
 
     async def embed(self, texts: list[str]) -> list[list[float]]:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _EMBED_BATCH_SIZE):
             batch = texts[start : start + _EMBED_BATCH_SIZE]
             response = await self._client.embeddings.create(
-                model=settings.openai_embedding_model,
+                model=settings.embedding_model,
                 input=batch,
-                dimensions=settings.openai_embedding_dimensions,
+                # the OpenAI SDK defaults to base64, which OpenRouter's upstream
+                # providers (e.g. NVIDIA) reject outright
+                encoding_format="float",
             )
             for item in response.data:
-                if len(item.embedding) != settings.openai_embedding_dimensions:
+                # OpenRouter proxies to many providers and has no `dimensions`
+                # request param, so the native size is whatever the model emits;
+                # it must match the pgvector column width.
+                if len(item.embedding) != settings.embedding_dimensions:
                     raise ValueError(
                         f"unexpected embedding dimension {len(item.embedding)}, "
-                        f"expected {settings.openai_embedding_dimensions}"
+                        f"expected {settings.embedding_dimensions}"
                     )
                 vectors.append(item.embedding)
         return vectors
@@ -187,7 +195,7 @@ async def ingest_corpus(
     """
     manifest = json.loads((downloads_dir / "manifest.json").read_text(encoding="utf-8"))
     session_factory = session_factory or default_session_factory
-    embedder = embedder or OpenAIEmbedder()
+    embedder = embedder or OpenRouterEmbedder()
     stats = IngestStats()
 
     async with session_factory() as session:

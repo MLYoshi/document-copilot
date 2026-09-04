@@ -10,7 +10,7 @@
 - 出站 HTTP 使用 `httpx`
 - 测试使用 `pytest`
 - SQLAlchemy（`asyncpg` 驱动）+ Alembic 迁移，用于数据库访问与 schema 变更
-- OpenAI SDK 用于 LLM 与 embeddings
+- OpenAI SDK 用于 LLM 与 embeddings，统一通过 OpenRouter 网关调用（`base_url=https://openrouter.ai/api/v1`）
 - `pyjwt` 用于 JWT 签发/校验，`bcrypt` 直接用于密码哈希（passlib 已停止维护且与 bcrypt 5.0 不兼容，勿重新引入）
 - `pgvector` 用于语义检索，Postgres 全文检索用于关键词检索。混合检索应分别执行向量查询与全文查询，再用 Reciprocal Rank Fusion（RRF）在 Python 中融合排序结果。
 - `structlog` 用于日志
@@ -73,7 +73,7 @@ backend/
 
 - **优先单元测试而非集成测试。** 在服务边界处做 mock。
 - 快速测试套件（`pytest -m "not integration"`）必须保持通过，且不得访问网络 / 数据库。
-- 集成测试使用 `@pytest.mark.integration` 标记，可能需要真实 PostgreSQL 数据库或真实 OpenAI 凭据。
+- 集成测试使用 `@pytest.mark.integration` 标记，可能需要真实 PostgreSQL 数据库或真实 OpenRouter 凭据。
 - 测试文件与其测试对象放在一起（`retrieval/retriever.py` → `tests/retrieval/test_retriever.py`）。
 - 必须覆盖的测试：入库逻辑、检索、引用抽取、有据性校验（grounding enforcement）。
 

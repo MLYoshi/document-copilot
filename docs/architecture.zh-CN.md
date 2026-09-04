@@ -447,7 +447,7 @@ PostgreSQL
 普通的表和普通索引应尽量体现在 SQLAlchemy 模型中。以下内容应在迁移里用 `op.execute()` 显式书写，或通过仔细审阅的 Alembic 操作完成：
 
 - `create extension if not exists vector`
-- `vector(1536)` 嵌入列（如果 SQLAlchemy 的类型渲染不够用）
+- `vector(2048)` 嵌入列（如果 SQLAlchemy 的类型渲染不够用）
 - 生成的 `tsvector` 列
 - 用于向量检索的 HNSW 索引
 - 用于全文检索和 JSON 元数据的 GIN 索引
@@ -499,10 +499,11 @@ DATABASE_URL=postgresql+asyncpg://postgres:postgres@localhost:5432/document_copi
 JWT_SECRET_KEY=
 JWT_ALGORITHM=HS256
 
-OPENAI_API_KEY=
+OPENROUTER_API_KEY=
+OPENROUTER_BASE_URL=https://openrouter.ai/api/v1
 
-OPENAI_EMBEDDING_MODEL=text-embedding-3-small
-OPENAI_EMBEDDING_DIMENSIONS=1536
+EMBEDDING_MODEL=nvidia/nemotron-3-embed-1b:free
+EMBEDDING_DIMENSIONS=2048
 ```
 
 这样整个系统的依赖关系非常干净：

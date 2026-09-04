@@ -11,7 +11,7 @@ from app.database.base import Base
 if TYPE_CHECKING:
     from app.database.models.source_document import SourceDocument
 
-EMBEDDING_DIMENSIONS = 1536  # keep in sync with settings.openai_embedding_dimensions
+EMBEDDING_DIMENSIONS = 2048  # keep in sync with settings.embedding_dimensions
 
 
 class DocumentChunk(Base):

@@ -79,7 +79,7 @@ class FakeEmbedder:
         self.batches.append(list(texts))
         if self.fail_on is not None and any(self.fail_on in t for t in texts):
             raise RuntimeError("embedding service unavailable")
-        return [[(len(t) % 7 + 1) * 0.01] * 1536 for t in texts]
+        return [[(len(t) % 7 + 1) * 0.01] * 2048 for t in texts]
 
 
 @pytest.fixture

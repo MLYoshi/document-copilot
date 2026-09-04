@@ -62,7 +62,7 @@ async def test_chunks_have_embeddings_metadata_and_search_vector(
         assert len(chunks) > 0
         for chunk in chunks:
             assert chunk.embedding is not None
-            assert len(chunk.embedding) == 1536
+            assert len(chunk.embedding) == 2048
             assert chunk.token_count > 0
             assert "section_path" in chunk.metadata_json
             assert chunk.chunk_index >= 0

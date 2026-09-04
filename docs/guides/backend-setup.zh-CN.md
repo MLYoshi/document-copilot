@@ -74,7 +74,7 @@ uv run alembic revision --autogenerate -m "add document tables"
 务必人工审查生成的迁移。对于 autogenerate 无法可靠推断的 Postgres 特性，需要显式补上相应操作：
 
 - `create extension if not exists vector`
-- `vector(1536)` 列
+- `vector(2048)` 列（宽度由 `settings.embedding_dimensions` 决定）
 - 生成列 `tsvector`
 - HNSW 与 GIN 索引
 

@@ -16,10 +16,11 @@ class Settings(BaseSettings):
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 30
 
-    # OpenAI (LLM / embeddings)
-    openai_api_key: str | None = None
-    openai_embedding_model: str = "text-embedding-3-small"
-    openai_embedding_dimensions: int = 1536
+    # OpenRouter (LLM / embeddings) — OpenAI-compatible endpoint
+    openrouter_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    embedding_model: str = "nvidia/nemotron-3-embed-1b:free"
+    embedding_dimensions: int = 2048
 
     # CORS
     allowed_origins: str = "http://localhost:5173"
