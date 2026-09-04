@@ -12,7 +12,7 @@ NVDA_ACCESSION = "0001045810-25-000023"
 
 async def test_ingest_seeds_corpus_owner_user(downloads_dir, session_factory, fake_embedder):
     stats = await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
 
     assert stats.processed == 2
@@ -27,7 +27,7 @@ async def test_documents_stored_with_completed_status_and_metadata(
     downloads_dir, session_factory, fake_embedder
 ):
     await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
 
     async with session_factory() as session:
@@ -52,7 +52,7 @@ async def test_chunks_have_embeddings_metadata_and_search_vector(
     downloads_dir, session_factory, fake_embedder
 ):
     await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
 
     async with session_factory() as session:
@@ -62,7 +62,7 @@ async def test_chunks_have_embeddings_metadata_and_search_vector(
         assert len(chunks) > 0
         for chunk in chunks:
             assert chunk.embedding is not None
-            assert len(chunk.embedding) == 2048
+            assert len(chunk.embedding) == 1024
             assert chunk.token_count > 0
             assert "section_path" in chunk.metadata_json
             assert chunk.chunk_index >= 0
@@ -81,14 +81,14 @@ async def test_chunks_have_embeddings_metadata_and_search_vector(
 
 async def test_second_run_is_idempotent(downloads_dir, session_factory, fake_embedder):
     await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
     async with session_factory() as session:
         doc_count = len((await session.execute(select(SourceDocument))).all())
         chunk_count = len((await session.execute(select(DocumentChunk))).all())
 
     stats = await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
 
     assert stats.processed == 0
@@ -105,7 +105,7 @@ async def test_missing_file_fails_single_filing_without_aborting_run(
     (downloads_dir / "2025" / "nvda_10k.html").unlink()
 
     stats = await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
 
     assert stats.processed == 1
@@ -119,7 +119,7 @@ async def test_failed_document_is_marked_failed_and_retried_on_rerun(
     fake_embedder.fail_on = "NVIDIA"
 
     first = await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
     assert first.processed == 1
     assert first.failed == 1
@@ -137,7 +137,7 @@ async def test_failed_document_is_marked_failed_and_retried_on_rerun(
     # rerun with a healthy embedder rebuilds only the failed document
     fake_embedder.fail_on = None
     second = await ingest_corpus(
-        downloads_dir, session_factory=session_factory, embedder=fake_embedder
+        downloads_dir, session_factory=session_factory, embed=fake_embedder
     )
     assert second.processed == 1
     assert second.skipped == 1

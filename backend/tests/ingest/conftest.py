@@ -69,17 +69,17 @@ async def db_session(session_factory):
 
 
 class FakeEmbedder:
-    """Deterministic offline embedder; can be told to fail on a marker string."""
+    """Callable stand-in for ``get_embedding``; can fail on a marker string."""
 
     def __init__(self) -> None:
         self.batches: list[list[str]] = []
         self.fail_on: str | None = None
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def __call__(self, texts: list[str]) -> list[list[float]]:
         self.batches.append(list(texts))
         if self.fail_on is not None and any(self.fail_on in t for t in texts):
             raise RuntimeError("embedding service unavailable")
-        return [[(len(t) % 7 + 1) * 0.01] * 2048 for t in texts]
+        return [[(len(t) % 7 + 1) * 0.01] * 1024 for t in texts]
 
 
 @pytest.fixture

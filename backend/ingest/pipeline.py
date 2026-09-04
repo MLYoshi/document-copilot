@@ -3,60 +3,21 @@ import secrets
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, Protocol
+from typing import Literal
 
 import structlog
-from openai import AsyncOpenAI
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.auth.password import hash_password
-from app.config import settings
+from app.core.config import settings
+from app.core.embeddings import EmbedFn, get_embedding
 from app.database.models import DocumentChunk, DocumentStatus, SourceDocument, User
 from app.database.session import session_factory as default_session_factory
 from ingest.chunker import chunk_markdown
 from ingest.extractor import extract_markdown
 
-_EMBED_BATCH_SIZE = 100
-
 logger = structlog.get_logger()
-
-
-class Embedder(Protocol):
-    async def embed(self, texts: list[str]) -> list[list[float]]: ...
-
-
-class OpenRouterEmbedder:
-    def __init__(self) -> None:
-        if not settings.openrouter_api_key:
-            raise RuntimeError("OPENROUTER_API_KEY is required for the ingest pipeline")
-        self._client = AsyncOpenAI(
-            api_key=settings.openrouter_api_key,
-            base_url=settings.openrouter_base_url,
-        )
-
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        vectors: list[list[float]] = []
-        for start in range(0, len(texts), _EMBED_BATCH_SIZE):
-            batch = texts[start : start + _EMBED_BATCH_SIZE]
-            response = await self._client.embeddings.create(
-                model=settings.embedding_model,
-                input=batch,
-                # the OpenAI SDK defaults to base64, which OpenRouter's upstream
-                # providers (e.g. NVIDIA) reject outright
-                encoding_format="float",
-            )
-            for item in response.data:
-                # OpenRouter proxies to many providers and has no `dimensions`
-                # request param, so the native size is whatever the model emits;
-                # it must match the pgvector column width.
-                if len(item.embedding) != settings.embedding_dimensions:
-                    raise ValueError(
-                        f"unexpected embedding dimension {len(item.embedding)}, "
-                        f"expected {settings.embedding_dimensions}"
-                    )
-                vectors.append(item.embedding)
-        return vectors
 
 
 @dataclass
@@ -119,7 +80,7 @@ async def _ingest_filing(
     user_id: uuid.UUID,
     filing: dict[str, str],
     downloads_dir: Path,
-    embedder: Embedder,
+    embed: EmbedFn,
 ) -> Literal["processed", "skipped"]:
     accession = filing["accession_number"]
     existing = await _find_document(session, user_id, accession)
@@ -150,7 +111,7 @@ async def _ingest_filing(
     document.status = DocumentStatus.processing
     await session.commit()
 
-    embeddings = await embedder.embed([chunk.content for chunk in chunks])
+    embeddings = await embed([chunk.content for chunk in chunks])
 
     for chunk, vector in zip(chunks, embeddings, strict=True):
         session.add(
@@ -184,7 +145,7 @@ async def ingest_corpus(
     downloads_dir: Path,
     *,
     session_factory: async_sessionmaker | None = None,
-    embedder: Embedder | None = None,
+    embed: EmbedFn | None = None,
 ) -> IngestStats:
     """Ingest every filing listed in ``downloads_dir/manifest.json``.
 
@@ -195,7 +156,7 @@ async def ingest_corpus(
     """
     manifest = json.loads((downloads_dir / "manifest.json").read_text(encoding="utf-8"))
     session_factory = session_factory or default_session_factory
-    embedder = embedder or OpenRouterEmbedder()
+    embed = embed or get_embedding
     stats = IngestStats()
 
     async with session_factory() as session:
@@ -205,7 +166,7 @@ async def ingest_corpus(
         user_id = user.id
         for filing in manifest["filings"]:
             try:
-                outcome = await _ingest_filing(session, user_id, filing, downloads_dir, embedder)
+                outcome = await _ingest_filing(session, user_id, filing, downloads_dir, embed)
             except Exception:
                 await session.rollback()
                 logger.exception(

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 import app.database.models  # noqa: F401  (register models on Base.metadata)
 from alembic import context
-from app.config import settings
+from app.core.config import settings
 from app.database.base import Base
 
 # this is the Alembic Config object, which provides

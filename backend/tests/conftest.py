@@ -2,7 +2,7 @@
 
 Integration tests run against a dedicated database (document_copilot_test).
 The DATABASE_URL override must happen here: this conftest is imported by
-pytest at startup, before any test module imports app.config — whose cached
+pytest at startup, before any test module imports app.core.config — whose cached
 settings singleton would otherwise leak the development URL into alembic
 migration runs when the full suite executes.
 """
@@ -22,7 +22,7 @@ def _switch_database(url: str, db_name: str) -> str:
 
 def _base_database_url() -> str | None:
     # parsed manually: pydantic-settings' env_file would only be read by
-    # app.config at import time, which is exactly what we must precede
+    # app.core.config at import time, which is exactly what we must precede
     url = os.environ.get("DATABASE_URL", "")
     if not url:
         env_file = BACKEND_DIR / ".env"
@@ -44,7 +44,7 @@ def test_database_url() -> str:
     return _switch_database(base, TEST_DB_NAME)
 
 
-# Only override when a base URL exists; without one, app.config fails on its
+# Only override when a base URL exists; without one, app.core.config fails on its
 # own and the fast test suite must not break at collection time.
 _base = _base_database_url()
 if _base:

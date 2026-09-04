@@ -19,8 +19,12 @@ class Settings(BaseSettings):
     # OpenRouter (LLM / embeddings) — OpenAI-compatible endpoint
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    embedding_model: str = "nvidia/nemotron-3-embed-1b:free"
-    embedding_dimensions: int = 2048
+    # The model has to satisfy two limits at once: pgvector refuses to index
+    # vectors wider than 2000 dimensions, and chunks run to ~800 tokens.
+    # bge-m3 is 1024-dim and takes long inputs; liquid/lfm-2.5-embedding-350m
+    # is 1024-dim too but caps input at 512 tokens, so it cannot be used here.
+    embedding_model: str = "baai/bge-m3"
+    embedding_dimensions: int = 1024
 
     # CORS
     allowed_origins: str = "http://localhost:5173"

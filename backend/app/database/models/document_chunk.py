@@ -11,7 +11,7 @@ from app.database.base import Base
 if TYPE_CHECKING:
     from app.database.models.source_document import SourceDocument
 
-EMBEDDING_DIMENSIONS = 2048  # keep in sync with settings.embedding_dimensions
+EMBEDDING_DIMENSIONS = 1024  # keep in sync with settings.embedding_dimensions
 
 
 class DocumentChunk(Base):

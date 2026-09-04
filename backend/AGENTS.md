@@ -57,8 +57,8 @@ backend/
 
 ## 配置
 
-- `app.config.settings` 是唯一来源。在需要的地方导入 settings；应用代码中绝不调用 `os.getenv`，绝不调用 `load_dotenv`。
-- 如果第三方 SDK 直接读取 `os.environ`，就在 `config.py` 中做镜像配置 —— 不要在别处到处写 `setdefault`。
+- `app.core.config.settings` 是唯一来源。在需要的地方导入 settings；应用代码中绝不调用 `os.getenv`，绝不调用 `load_dotenv`。
+- 如果第三方 SDK 直接读取 `os.environ`，就在 `app/core/config.py` 中做镜像配置 —— 不要在别处到处写 `setdefault`。
 - 启动时若必需的环境变量缺失，应快速失败（fail fast）。
 
 ## 数据库迁移
