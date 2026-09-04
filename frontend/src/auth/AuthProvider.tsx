@@ -16,13 +16,12 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserPublic | null>(null);
-  const [initializing, setInitializing] = useState(true);
+  // Only a stored token triggers the mount-time session probe; without one
+  // there is nothing to initialize.
+  const [initializing, setInitializing] = useState<boolean>(() => !!getAccessToken());
 
   useEffect(() => {
-    if (!getAccessToken()) {
-      setInitializing(false);
-      return;
-    }
+    if (!getAccessToken()) return;
     // Session probe: a 401 here means the stored tokens are unusable.
     me()
       .then(setUser)

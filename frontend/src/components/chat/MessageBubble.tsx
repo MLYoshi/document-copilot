@@ -6,7 +6,6 @@ import { TriangleAlert } from "lucide-react";
 import { CitationList } from "@/components/chat/CitationList";
 import { Badge } from "@/components/ui/badge";
 import type { ChatMessage, Citation, SourcePassage } from "@/chat/types";
-import { cn } from "@/lib/utils";
 
 type MessageBubbleProps = {
   message: ChatMessage;

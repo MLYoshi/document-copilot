@@ -33,8 +33,8 @@ export function useThreadChat(threadId: string, options: ThreadChatOptions = {})
 
   useEffect(() => {
     let cancelled = false;
-    setIsHydrating(true);
-    setHydrateError(null);
+    // The view is keyed by threadId, so this hook remounts and `isHydrating`
+    // starts as true; the async flow below is what flips it back.
     listMessages(threadId)
       .then((messages) => {
         if (!cancelled) chat.setMessages(messages);

@@ -48,7 +48,7 @@ export function MessageList({ messages, status, isLoading = false }: MessageList
           <SkeletonThread />
         ) : (
           <>
-            {messages.map((message, index) => (
+            {messages.map((message) => (
               <MessageBubble
                 key={message.id}
                 message={message}
