@@ -6,12 +6,11 @@ from sqlalchemy import Computed, ForeignKey, Index, Integer, Text, text
 from sqlalchemy.dialects.postgresql import JSONB, TSVECTOR, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
+from app.core.config import settings
 from app.database.base import Base
 
 if TYPE_CHECKING:
     from app.database.models.source_document import SourceDocument
-
-EMBEDDING_DIMENSIONS = 1024  # keep in sync with settings.embedding_dimensions
 
 
 class DocumentChunk(Base):
@@ -33,7 +32,12 @@ class DocumentChunk(Base):
     metadata_json: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    embedding = mapped_column(VECTOR(EMBEDDING_DIMENSIONS), nullable=True)
+    # Width follows settings rather than a literal: pgvector will not cast
+    # between widths, so a column that disagrees with what the embedder returns
+    # only fails on the first real write — after the embeddings are paid for.
+    # The migration must be retyped alongside; tests/ingest/test_schema.py
+    # guards the pair.
+    embedding = mapped_column(VECTOR(settings.embedding_dimensions), nullable=True)
     search_vector = mapped_column(
         TSVECTOR,
         Computed("to_tsvector('english', content)", persisted=True),

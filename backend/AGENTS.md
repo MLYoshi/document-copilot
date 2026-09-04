@@ -74,6 +74,9 @@ backend/
 - **优先单元测试而非集成测试。** 在服务边界处做 mock。
 - 快速测试套件（`pytest -m "not integration"`）必须保持通过，且不得访问网络 / 数据库。
 - 集成测试使用 `@pytest.mark.integration` 标记，可能需要真实 PostgreSQL 数据库或真实 OpenRouter 凭据。
+- **改动嵌入/向量链路后、以及对全量语料入库前，先跑 `uv run python -m ingest.smoke`。** 它用真实 OpenRouter 凭据把一份文档的 `DEFAULT_CHUNK_COUNT` 个 chunk 走完 抽取 → 分块 → embed → 写 pgvector → 回读最近邻 → 删除，花费不到 0.0001 美元。它专门抓那些「全量跑到一半才暴露、而钱已经烧掉」的错误：API Key 失效、模型忽略 `dimensions`、返回维度与列宽不符、chunker 元数据键缺失。
+- 真调 API 的测试必须用 `skipif` 跳过缺 key 的情况（`tests/ingest/test_smoke.py` 是范例）—— 没有凭据的环境跑 `pytest -m integration` 不得变红。
+- 改 `settings.embedding_dimensions` 或更换嵌入模型后，`tests/ingest/test_schema.py` 负责比对配置 / ORM 模型 / 数据库实际列宽是否一致；迁移 `29baa7ace0d1` 的 `_WIDTH_AFTER` 需同步修改。
 - 测试文件与其测试对象放在一起（`retrieval/retriever.py` → `tests/retrieval/test_retriever.py`）。
 - 必须覆盖的测试：入库逻辑、检索、引用抽取、有据性校验（grounding enforcement）。
 
@@ -85,3 +88,6 @@ backend/
 - 通过全局变量共享状态，而不用 FastAPI 的 `app.state` 或依赖注入。
 - 用静默的兜底逻辑掩盖真实的配置错误。
 - 在单元测试中 mock LLM 却不测试 grounding 契约 —— prompt 就是产品本身。
+- 没跑 `ingest.smoke` 就对全量语料开跑向量化 —— 一次调用不到 1 厘钱，能省下整批重跑的费用。
+- 为省 API 费用把 `ingest/smoke.py` 的 `DEFAULT_CHUNK_COUNT` 降到 1 —— 单行时「离 X 最近的向量是 X」构造性为真，最近邻断言就废了。
+- 在迁移里 import 应用代码（包括 `settings`）—— 迁移是历史快照，import 会让它的语义随当前配置漂移。宽度一类需要与应用对齐的值写成具名常量 + 注释，由测试兜底。

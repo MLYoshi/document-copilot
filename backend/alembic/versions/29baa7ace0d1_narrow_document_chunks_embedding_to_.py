@@ -4,9 +4,9 @@ Revision ID: 29baa7ace0d1
 Revises: d9939f390cd5
 Create Date: 2026-09-04 16:14:43.089070
 
-Switches embeddings to liquid/lfm-2.5-embedding-350m:free, whose native width
-is 1024. pgvector refuses to build an HNSW (or IVFFlat) index over vectors
-wider than 2000 dimensions, so the column width must stay under that cap.
+Switches embeddings to baai/bge-m3, whose native width is 1024. pgvector
+refuses to build an HNSW (or IVFFlat) index over vectors wider than 2000
+dimensions, so the column width must stay under that cap.
 
 pgvector cannot cast between vector widths, so existing vectors are dropped and
 their documents reset to `pending` — the next ingest run rebuilds them.
@@ -24,6 +24,13 @@ branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
 _INDEX = 'document_chunks_embedding_idx'
+
+# Literals on purpose: a migration is a snapshot of the schema at its point in
+# history, so it must not import the ORM model — whose width tracks
+# settings.embedding_dimensions. _WIDTH_AFTER has to equal that setting;
+# tests/ingest/test_schema.py fails when the two drift apart.
+_WIDTH_BEFORE = 1536  # as created by 79bac489581f
+_WIDTH_AFTER = 1024   # keep in sync with settings.embedding_dimensions
 
 
 def _drop_index() -> None:
@@ -62,11 +69,15 @@ def _retype(width: int) -> None:
 
 def upgrade() -> None:
     _drop_index()
-    _retype(1024)
+    _retype(_WIDTH_AFTER)
     _create_index()
 
 
 def downgrade() -> None:
+    # Restores the width 79bac489581f created, and is only meaningful as a step
+    # towards an older checkout: the ORM model sits at _WIDTH_AFTER, so the
+    # current application cannot write to the downgraded column. Run
+    # `alembic upgrade head` again before starting the server.
     _drop_index()
-    _retype(1536)
+    _retype(_WIDTH_BEFORE)
     _create_index()

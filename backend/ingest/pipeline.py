@@ -27,7 +27,7 @@ class IngestStats:
     failed: int = 0
 
 
-async def _seed_corpus_owner(session: AsyncSession) -> User:
+async def seed_corpus_owner(session: AsyncSession) -> User:
     result = await session.execute(
         select(User).where(User.email == settings.corpus_owner_email)
     )
@@ -160,7 +160,7 @@ async def ingest_corpus(
     stats = IngestStats()
 
     async with session_factory() as session:
-        user = await _seed_corpus_owner(session)
+        user = await seed_corpus_owner(session)
         # capture the id up front: rollback() below expires ORM objects, and
         # touching user.id afterwards would trigger a sync lazy refresh
         user_id = user.id
