@@ -28,9 +28,17 @@ class Settings(BaseSettings):
 
     # Chat model used by the assistant agent (OpenRouter model slug)
     chat_model: str = "minimax/minimax-m3:free"
-    # Hard cap on passages injected into the prompt (context size is the
-    # only real bottleneck of the pre-retrieval injection design)
+    # Hard cap on passages returned by one search_filings call (context size
+    # is the real bottleneck of the agent-loop design)
     retrieval_top_k: int = 8
+    # Each retrieval leg (semantic / full-text) fetches this deep before RRF
+    # fusion; must cover top_k so fused ranks are meaningful
+    retrieval_fetch_depth: int = 20
+    # RRF smoothing constant: rank 1 contributes 1/(k+1)
+    rrf_k: int = 60
+    # Adjacent chunks fetched on each side by read_chunks (context for
+    # grounding checks across chunk boundaries)
+    read_chunk_window: int = 1
 
     # CORS
     allowed_origins: str = "http://localhost:5173"
@@ -55,11 +63,11 @@ class Settings(BaseSettings):
             raise ValueError("jwt_secret_key must be at least 32 bytes (e.g. `openssl rand -hex 32`)")
         return value
 
-    @field_validator("retrieval_top_k")
+    @field_validator("retrieval_top_k", "retrieval_fetch_depth", "rrf_k", "read_chunk_window")
     @classmethod
     def _positive_top_k(cls, value: int) -> int:
         if value < 1:
-            raise ValueError("retrieval_top_k must be >= 1")
+            raise ValueError("retrieval parameters must be >= 1")
         return value
 
     def require_openrouter_api_key(self) -> str:

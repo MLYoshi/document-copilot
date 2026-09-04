@@ -1,9 +1,11 @@
 """Dependency injection for the document agent.
 
-The orchestrator assembles one :class:`DocumentAgentDeps` per question and
-fills ``passages`` after retrieval; the agent reads them through ``RunContext``.
-Explicit injection instead of module globals keeps the agent testable with a
-fake retriever/validator and no database.
+The orchestrator assembles one :class:`DocumentAgentDeps` per question; the
+agent's ``search_filings`` / ``read_chunks`` tools append every passage they
+return, so ``passages`` accumulates the full retrieval set for the run and
+the output validator resolves citations against it. Explicit injection
+instead of module globals keeps the agent testable with a fake
+retriever/validator and no database.
 """
 
 from dataclasses import dataclass, field
@@ -20,7 +22,15 @@ class DocumentAgentDeps:
     thread_id: UUID
     retriever: PgVectorRetriever
     grounding_validator: GroundingValidator
-    # Top-K passages retrieved for the current question, filled in by the
-    # orchestrator before the agent runs; rendered into the instructions and
-    # used to resolve citations.
+    # Every passage returned by any tool call during the current run,
+    # deduplicated by chunk_id; filled by the agent loop, not the
+    # orchestrator, and used to resolve citations at output validation time.
     passages: list[SourcePassage] = field(default_factory=list)
+
+    def add_passages(self, new: list[SourcePassage]) -> None:
+        """Append passages not yet in the retrieval set, keeping first-seen order."""
+        seen = {passage.chunk_id for passage in self.passages}
+        for passage in new:
+            if passage.chunk_id not in seen:
+                seen.add(passage.chunk_id)
+                self.passages.append(passage)

@@ -1,10 +1,10 @@
-"""Orchestrator for the question → retrieval → grounded answer pipeline.
+"""Orchestrator for the agent-loop grounded answer pipeline.
 
-This is the public entry point that issue 04 will wire behind HTTP. It
-assembles the per-question dependencies, retrieves the top-K passages, hands
-them to the agent through ``RunContext`` and returns the validated
-:class:`GroundedAnswer`. Persistence (threads, messages) is intentionally out
-of scope here.
+This is the public entry point wired behind HTTP. It assembles the
+per-question dependencies and hands control to the agent, which retrieves
+passages itself through its ``search_filings`` / ``read_chunks`` tools and
+returns the validated :class:`GroundedAnswer`. Persistence (threads,
+messages) is intentionally out of scope here.
 """
 
 from typing import cast
@@ -28,10 +28,13 @@ async def answer_question(
     question: str,
     agent=None,  # Agent[DocumentAgentDeps, ...]; injectable for mock-LLM tests
 ) -> GroundedAnswer:
-    """Answer ``question`` strictly from passages retrieved for this round.
+    """Answer ``question`` from passages the agent retrieves via its tools.
 
-    The agent's ``output_validator`` already ran grounding validation and
-    resolved citations into ``cited_passages``, so its output is a
+    Retrieval timing is the agent's decision, not the orchestrator's: the
+    tool loop may search, reformulate, and read adjacent chunks for as long
+    as it needs. The agent's ``output_validator`` already ran grounding
+    validation against every passage accumulated during the run and resolved
+    citations into ``cited_passages``, so its output is a
     :class:`GroundedAnswer` despite the declared ``AnswerDraft`` output type.
     Raises :class:`~app.grounding.validator.GroundingError` on any grounding
     violation — the caller maps it to a controlled error response.
@@ -42,7 +45,6 @@ async def answer_question(
         retriever=PgVectorRetriever(session, get_embedding),
         grounding_validator=GroundingValidator(),
     )
-    deps.passages = await deps.retriever.search(question)
 
     result = await (agent if agent is not None else get_agent()).run(
         question, deps=deps

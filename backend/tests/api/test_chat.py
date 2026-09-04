@@ -1,9 +1,8 @@
+import json
 from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
 from uuid import UUID, uuid4
-
-import json
 
 import pytest
 from fastapi import HTTPException, status

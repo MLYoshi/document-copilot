@@ -40,3 +40,25 @@ class GroundedAnswer(BaseModel):
     citations: list[Citation]
     cited_passages: list[SourcePassage]
     evidence_sufficient: bool
+
+
+class ChunkSummary(BaseModel):
+    """Lean view of one retrieved chunk, as returned by ``search_filings``.
+
+    Full bodies are only shipped by ``read_chunks``; this keeps the search
+    tool's token cost flat while still exposing enough metadata for the
+    agent to decide which chunks are worth reading.
+    """
+
+    chunk_id: str
+    chunk_index: int
+    section_path: str
+    title: str
+    snippet: str
+
+
+class SearchResults(BaseModel):
+    """Result of one ``search_filings`` call."""
+
+    query: str
+    passages: list[ChunkSummary]

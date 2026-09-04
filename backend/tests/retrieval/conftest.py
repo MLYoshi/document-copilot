@@ -21,6 +21,12 @@ iPhone_CONTENT = (
 )
 RND_CONTENT = "Investment in research and development grew to fund new silicon."
 HIDDEN_CONTENT = "This chunk belongs to a deleted document and must stay hidden."
+# Carries an exact identifier that keyword queries match but semantic
+# retrieval cannot: its vector is orthogonal to every other test query.
+EXACT_CONTENT = (
+    "The aggregate purchase price was $1,234,567,890 recorded under "
+    "agreement No. 0098765432 with the underwriters."
+)
 
 
 def slot_vector(slot: int) -> list[float]:
@@ -120,8 +126,23 @@ async def seeded_corpus(db_session):
         metadata_json={"section_path": "Item 1. Business"},
         embedding=slot_vector(3),
     )
+    chunk_exact = DocumentChunk(
+        document_id=live_doc.id,
+        chunk_index=3,
+        content=EXACT_CONTENT,
+        token_count=20,
+        metadata_json={"section_path": "Item 7. MD&A > Acquisitions"},
+        embedding=slot_vector(4),
+    )
     db_session.add_all(
-        [chunk_iphone, chunk_rnd, chunk_unembedded, chunk_deleted, chunk_foreign]
+        [
+            chunk_iphone,
+            chunk_rnd,
+            chunk_unembedded,
+            chunk_deleted,
+            chunk_foreign,
+            chunk_exact,
+        ]
     )
     await db_session.commit()
 
@@ -131,4 +152,5 @@ async def seeded_corpus(db_session):
         "unembedded": chunk_unembedded,
         "deleted": chunk_deleted,
         "foreign": chunk_foreign,
+        "exact": chunk_exact,
     }

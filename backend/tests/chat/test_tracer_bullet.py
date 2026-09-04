@@ -13,9 +13,7 @@ from sqlalchemy import select
 
 from app.chat.orchestrator import answer_question
 from app.core.config import settings
-from app.core.embeddings import get_embedding
-from app.database.models import DocumentChunk
-from app.retrieval.retriever import PgVectorRetriever
+from app.database.models import DocumentChunk, SourceDocument, User
 from ingest.pipeline import ingest_corpus
 
 pytestmark = [
@@ -49,19 +47,12 @@ async def test_corpus_question_returns_citations_inside_the_retrieval_set(
     assert result.evidence_sufficient is True
     assert result.citations
 
-    # re-derive the retrieval set independently: every citation must land in it
-    retriever = PgVectorRetriever(db_session, get_embedding)
-    retrieval_set = await retriever.search(IN_CORPUS_QUESTION)
-    retrieved_by_id = {p.chunk_id: p for p in retrieval_set}
-
-    for citation in result.citations:
-        assert citation.chunk_id in retrieved_by_id
-        passage = next(
-            p for p in result.cited_passages if p.chunk_id == citation.chunk_id
-        )
-        assert " ".join(citation.quote.split()) in " ".join(passage.content.split())
-
-    # cited_passages are the exact DB rows, not model-invented text
+    # The agent loop retrieves through its own tool calls (possibly with a
+    # reformulated query, possibly reading neighbor chunks), so the retrieval
+    # set is whatever the tools accumulated — replaying search(question)
+    # independently no longer reproduces it. The enforceable invariant is
+    # weaker and still meaningful: every citation points at a real chunk of
+    # the corpus owner's filings, with verbatim-matching text.
     cited_ids = {c.chunk_id for c in result.citations}
     rows = (
         (
@@ -74,9 +65,32 @@ async def test_corpus_question_returns_citations_inside_the_retrieval_set(
         .scalars()
         .all()
     )
+    assert rows, "citations must resolve to real corpus chunks"
+    owner_chunk_ids = set(
+        (
+            await db_session.execute(
+                select(DocumentChunk.id)
+                .join(SourceDocument, DocumentChunk.document_id == SourceDocument.id)
+                .join(User, SourceDocument.user_id == User.id)
+                .where(
+                    DocumentChunk.id.in_([UUID(c) for c in cited_ids]),
+                    User.email == settings.corpus_owner_email,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert {str(chunk_id) for chunk_id in owner_chunk_ids} == cited_ids
+    # cited_passages are the exact DB rows, not model-invented text
     assert {str(r.id): r.content for r in rows} == {
         p.chunk_id: p.content for p in result.cited_passages
     }
+    for citation in result.citations:
+        passage = next(
+            p for p in result.cited_passages if p.chunk_id == citation.chunk_id
+        )
+        assert " ".join(citation.quote.split()) in " ".join(passage.content.split())
 
 
 async def test_out_of_corpus_question_declares_insufficient_evidence(
