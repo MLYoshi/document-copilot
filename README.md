@@ -16,9 +16,9 @@
 | LLM 编排 | PydanticAI（类型化 agent），OpenAI SDK 经 OpenRouter 网关调用 |
 | 前端 | Vite + React SPA + TypeScript（严格模式），**不是 Next.js** |
 | UI | Tailwind CSS + shadcn/ui |
-| 数据库 | PostgreSQL + pgvector（语义检索）+ Postgres 全文检索 |
+| 数据库 | Supabase Postgres + pgvector（语义检索）+ Postgres 全文检索 |
 | 迁移 | SQLAlchemy 模型 + Alembic |
-| 认证 | FastAPI 自实现 JWT（邮箱 + 密码），无第三方 Auth/OAuth |
+| 认证 | Supabase Auth（邮箱 + 密码、会话刷新、登出） |
 | 依赖管理 | 后端 `uv`，前端 `pnpm` |
 
 ## 架构图
@@ -34,9 +34,9 @@ flowchart TB
         I5 --> I6["写入 Postgres（幂等去重）"]
     end
 
-    subgraph db["PostgreSQL + pgvector"]
+    subgraph db["Supabase Postgres + pgvector"]
         direction LR
-        D1["users / chat_threads / chat_messages"]
+        D1["auth.users / chat_threads / chat_messages"]
         D2["source_documents / document_chunks<br/>(pgvector 1024 维 + tsvector)"]
     end
 
@@ -44,7 +44,7 @@ flowchart TB
         direction TB
         U["分析师"] --> FE["React SPA<br/>(Vite + React + TS)"]
         FE -- "JWT Bearer" --> API["FastAPI（Uvicorn, :8000）"]
-        API --> AUTH["auth/<br/>JWT 签发/校验、密码哈希"]
+        API --> AUTH["Supabase Auth<br/>登录/刷新/令牌校验"]
         API --> CHAT["chat/<br/>线程/消息 + 流式编排"]
         CHAT --> AGENT["assistant/<br/>PydanticAI Agent（唯一 LLM 边界）"]
         AGENT -- "search_filings / read_chunks" --> RETR["retrieval/<br/>混合检索（向量 + 全文 + RRF）"]
@@ -57,7 +57,7 @@ flowchart TB
     FE -- "流式返回带引用答案" --> U
 ```
 
-两条链路通过**共享的嵌入客户端**（`backend/app/core/embeddings.py`）和**共享的 Postgres 表**衔接：离线侧写库、在线侧检索，必须用同一嵌入模型和同一向量维度（默认 `baai/bge-m3`，1024 维）。
+两条链路通过**共享的嵌入客户端**（`backend/app/core/embeddings.py`）和**共享的 Supabase Postgres 表**衔接：离线侧写库、在线侧检索，必须用同一嵌入模型和同一向量维度（默认 `baai/bge-m3`，1024 维）。用户身份由 `auth.users` 管理，业务表通过 `user_id` 关联。
 
 ### 核心流程
 
@@ -74,15 +74,15 @@ flowchart TB
 
 - Python 3.12+ 与 [uv](https://docs.astral.sh/uv/)
 - Node.js + pnpm
-- Docker（本地 Postgres）
+- 一个 Supabase 项目（Auth + Postgres + pgvector）
 
 ### 后端
 
 ```bash
 cd backend
-uv sync                                        # 安装依赖（参考 .env.example 配置环境变量）
-docker compose up -d postgres                  # 启动本地 pg16 + pgvector（端口 5432）
-uv run alembic upgrade head                    # 应用数据库迁移
+cp .env.example .env                           # 填入 Supabase 项目与数据库连接信息
+uv sync                                        # 安装依赖
+uv run alembic upgrade head                    # 在 Supabase Postgres 应用迁移
 uv run uvicorn app.main:app --reload           # 启动开发服务器（端口 8000）
 ```
 
@@ -108,7 +108,7 @@ cd backend && uv run -m ingest
 
 ```bash
 uv run pytest                                  # 全部测试（不含集成测试）
-uv run pytest -m integration                   # 集成测试（需真实 DB/OpenRouter）
+uv run pytest -m integration                   # 需 TEST_DATABASE_URL 指向独立 Supabase 测试项目
 uv run ruff check . && uv run ruff format .    # lint / 格式化
 uv run alembic revision --autogenerate -m "…"  # 生成迁移（需人工审查）
 ```
@@ -123,8 +123,11 @@ pnpm lint             # eslint
 
 ## 认证
 
-- `POST /auth/register`、`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout`、`GET /me`
-- 前端收到 401 时自动刷新 access token，失败则跳转登录页。
+- 后端通过 Supabase Auth 完成注册、登录、刷新与登出，接口路径保持不变：`POST /auth/register`、`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout`、`GET /me`。
+- 前端收到 401 时自动用 Supabase refresh token 刷新 access token，失败则跳转登录页；前端无需新增 Supabase SDK。
+- 在 Supabase Dashboard 开启 Email provider。若开启邮箱确认，用户须先完成确认再登录。
+- `SUPABASE_SERVICE_ROLE_KEY` 仅供后端离线摄入使用，严禁写入前端环境变量。
+- 从旧数据库升级前，先在 Supabase Auth 创建对应用户；旧密码哈希与 refresh token 不会迁移，用户需要重新设置密码。
 
 ## 目录结构
 
@@ -132,7 +135,7 @@ pnpm lint             # eslint
 backend/
   app/
     api/           # 薄路由层（auth、chat）
-    auth/          # JWT、密码哈希、get_current_user
+    auth/          # Supabase Auth、get_current_user
     chat/          # 线程/消息业务 + 流式编排
     assistant/     # PydanticAI agent（唯一 LLM 边界）
     retrieval/     # 混合检索 + RRF
@@ -152,8 +155,4 @@ data/              # SEC 语料下载脚本（downloads/ 已 gitignore）
 docs/              # 架构文档与界面截图
 ```
 
-## 更多文档
 
-- `docs/architecture.zh-CN.md` — 目标架构（source of truth）
-- `docs/client-brief.md` — 客户一页纸（含 10 道示例分析师问题）
-- `docs/guides/backend-setup.zh-CN.md` / `docs/guides/frontend-setup.zh-CN.md` — 环境搭建

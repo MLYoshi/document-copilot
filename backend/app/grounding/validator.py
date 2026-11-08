@@ -1,19 +1,10 @@
-"""Post-hoc grounding enforcement: citations must be real and verbatim.
-
-The LLM is free to be wrong about *what* it cites, never about *whether the
-evidence exists*. Every citation is checked against the retrieval set for this
-run; any violation raises :class:`GroundingError` instead of being repaired,
-so an unfounded answer can never reach the user.
-"""
-
 import html
 import re
 
 from app.assistant.outputs import AnswerDraft, GroundedAnswer, SourcePassage
 
 
-class GroundingError(Exception):
-    """A drafted answer violated the grounding contract."""
+class GroundingError(Exception): ...
 
 
 _WHITESPACE_RUN = re.compile(r"\s+")
@@ -24,15 +15,6 @@ def _normalize(text: str) -> str:
 
 
 def _anchored_text(anchor: SourcePassage, passages: list[SourcePassage]) -> str:
-    """The anchor chunk's content, extended with its consecutive same-document chunks.
-
-    The agent reads neighbor chunks through ``read_chunks``, so a legitimate
-    quote may span a chunk boundary. Matching against the anchored run — the
-    anchor plus chunks at contiguous indexes within the same document — keeps
-    such quotes verbatim while still requiring every word to come from
-    passages the tools actually retrieved. Non-consecutive or cross-document
-    chunks are never joined.
-    """
     run = sorted(
         (p for p in passages if p.document_id == anchor.document_id),
         key=lambda p: p.chunk_index,

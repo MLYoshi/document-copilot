@@ -27,7 +27,6 @@ class DocumentChunk(Base):
     )
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     metadata_json: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
@@ -48,6 +47,5 @@ class DocumentChunk(Base):
             postgresql_ops={"embedding": "vector_cosine_ops"},
         ),
         Index("document_chunks_search_vector_idx", "search_vector", postgresql_using="gin"),
-        Index("document_chunks_metadata_idx", "metadata_json", postgresql_using="gin"),
         Index("uq_document_chunks_order", "document_id", "chunk_index", unique=True),
     )

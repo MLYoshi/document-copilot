@@ -1,13 +1,3 @@
-"""Chunk and embed source_documents into document_chunks.
-
-Final stage of the offline pipeline: reads each ``source_documents.content``
-from the database, reuses the shared chunker and the OpenRouter embedding
-client, and writes ``document_chunks`` rows. Retrieval still runs purely on
-prose chunks — tables stay structured-only in ``document_tables``.
-
-Run: uv run python -m ingest.embeddings
-"""
-
 from __future__ import annotations
 
 import asyncio
@@ -52,7 +42,6 @@ async def _embed_document(
                 document_id=document.id,
                 chunk_index=chunk.chunk_index,
                 content=chunk.content,
-                token_count=chunk.metadata["token_count"],
                 metadata_json=dict(chunk.metadata),
                 embedding=vector,
             )

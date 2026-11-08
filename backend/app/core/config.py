@@ -8,11 +8,9 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     database_url: str
-
-    jwt_secret_key: str
-    jwt_algorithm: str = "HS256"
-    jwt_access_token_expire_minutes: int = 30
-    jwt_refresh_token_expire_days: int = 30
+    supabase_url: str
+    supabase_anon_key: str
+    supabase_service_role_key: str | None = None
 
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
@@ -29,21 +27,16 @@ class Settings(BaseSettings):
 
     corpus_owner_email: str = "corpus@system.local"
 
-    @field_validator("database_url", "jwt_secret_key")
+    @field_validator("database_url", "supabase_url", "supabase_anon_key")
     @classmethod
     def _not_empty(cls, value: str, info) -> str:
         if not value.strip():
             raise ValueError(f"{info.field_name} must not be empty")
         return value
 
-    @field_validator("jwt_secret_key")
-    @classmethod
-    def _sufficient_key_length(cls, value: str) -> str:
-        if len(value.encode()) < 32:
-            raise ValueError("jwt_secret_key must be at least 32 bytes (e.g. `openssl rand -hex 32`)")
-        return value
-
-    @field_validator("retrieval_top_k", "retrieval_fetch_depth", "rrf_k", "read_chunk_window")
+    @field_validator(
+        "retrieval_top_k", "retrieval_fetch_depth", "rrf_k", "read_chunk_window"
+    )
     @classmethod
     def _positive_top_k(cls, value: int) -> int:
         if value < 1:
@@ -57,7 +50,11 @@ class Settings(BaseSettings):
 
     @property
     def allowed_origin_list(self) -> list[str]:
-        return [origin.strip() for origin in self.allowed_origins.split(",") if origin.strip()]
+        return [
+            origin.strip()
+            for origin in self.allowed_origins.split(",")
+            if origin.strip()
+        ]
 
 
 @lru_cache

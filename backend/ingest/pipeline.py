@@ -1,5 +1,4 @@
 import json
-import secrets
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -8,11 +7,12 @@ from typing import Literal
 import structlog
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from supabase_auth.types import User
 
-from app.auth.password import hash_password
+from app.auth.supabase import get_supabase_admin_client
 from app.core.config import settings
 from app.core.embeddings import EmbedFn, get_embedding
-from app.database.models import DocumentChunk, DocumentStatus, SourceDocument, User
+from app.database.models import DocumentChunk, DocumentStatus, SourceDocument
 from app.database.session import session_factory as default_session_factory
 from ingest.chunker import chunk_markdown
 from ingest.extractor import extract_markdown
@@ -28,18 +28,24 @@ class IngestStats:
 
 
 async def seed_corpus_owner(session: AsyncSession) -> User:
-    result = await session.execute(
-        select(User).where(User.email == settings.corpus_owner_email)
+    """Resolve or create the corpus owner in Supabase Auth."""
+    admin = get_supabase_admin_client().auth.admin
+    page = 1
+    while True:
+        users = await admin.list_users(page=page, per_page=1000)
+        if user := next(
+            (u for u in users if u.email == settings.corpus_owner_email), None
+        ):
+            return user
+        if len(users) < 1000:
+            break
+        page += 1
+    response = await admin.create_user(
+        {"email": settings.corpus_owner_email, "email_confirm": True}
     )
-    user = result.scalar_one_or_none()
-    if user is None:
-        user = User(
-            email=settings.corpus_owner_email,
-            password_hash=await hash_password(secrets.token_urlsafe(32)),
-        )
-        session.add(user)
-        await session.commit()
-    return user
+    if response.user is None:
+        raise RuntimeError("Supabase did not return the corpus owner")
+    return response.user
 
 
 async def _find_document(
@@ -116,7 +122,6 @@ async def _ingest_filing(
                 document_id=document.id,
                 chunk_index=chunk.chunk_index,
                 content=chunk.content,
-                token_count=chunk.metadata["token_count"],
                 metadata_json=dict(chunk.metadata),
                 embedding=vector,
             )
@@ -161,7 +166,9 @@ async def ingest_corpus(
         user_id = user.id
         for filing in manifest["filings"]:
             try:
-                outcome = await _ingest_filing(session, user_id, filing, downloads_dir, embed)
+                outcome = await _ingest_filing(
+                    session, user_id, filing, downloads_dir, embed
+                )
             except Exception:
                 await session.rollback()
                 logger.exception(

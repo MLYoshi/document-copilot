@@ -1,10 +1,3 @@
-"""Hybrid retrieval over the shared 10-K corpus.
-
-Two legs run against the same corpus filter — pgvector cosine (semantic)
-and Postgres full-text via the chunks' tsvector column (keyword) — and
-Reciprocal Rank Fusion merges the two ranked id lists. Kept free of any
-PydanticAI dependency so it can be tested and swapped independently.
-"""
 from __future__ import annotations
 
 from sqlalchemy import bindparam, text
@@ -78,14 +71,6 @@ class PgVectorRetriever:
         self.top_k = top_k if top_k is not None else settings.retrieval_top_k
 
     async def search(self, query: str) -> list[SourcePassage]:
-        """Hybrid search: semantic + full-text legs fused with RRF.
-
-        The legs run sequentially on the shared AsyncSession (asyncpg forbids
-        concurrent statements on one connection); both are index-backed so the
-        added latency is one cheap query. An empty corpus yields ``[]`` rather
-        than an error — the agent is expected to declare insufficient
-        evidence in that case.
-        """
         vectors = await self.embed([query])
         semantic_ids = [
             str(row[0])
@@ -126,14 +111,6 @@ class PgVectorRetriever:
         *,
         neighbor_window: int | None = None,
     ) -> list[SourcePassage]:
-        """Fetch full chunk bodies by id, plus adjacent chunks for context.
-
-        Neighbors are the ``neighbor_window`` chunks on each side within the
-        same document (chunk_index is contiguous per document), so the agent
-        can read across chunk boundaries when grounding a quote that a
-        chunker split in half. Results are ordered by document and chunk
-        position, not by request order.
-        """
         window = (
             neighbor_window
             if neighbor_window is not None

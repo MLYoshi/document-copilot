@@ -1,8 +1,7 @@
 from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.auth import service
-from app.auth.dependencies import get_current_user
+from app.auth.dependencies import get_current_user, oauth2_scheme
 from app.auth.schemas import (
     LoginRequest,
     LogoutRequest,
@@ -11,37 +10,34 @@ from app.auth.schemas import (
     TokenPair,
     UserPublic,
 )
-from app.database.session import get_session
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 
-@router.post("/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
-async def register(
-    body: RegisterRequest, session: AsyncSession = Depends(get_session)
-) -> UserPublic:
-    return await service.register(session, email=body.email, password_plaintext=body.password)
+@router.post(
+    "/register", response_model=UserPublic, status_code=status.HTTP_201_CREATED
+)
+async def register(body: RegisterRequest) -> UserPublic:
+    return await service.register(email=body.email, password=body.password)
 
 
 @router.post("/login", response_model=TokenPair)
-async def login(body: LoginRequest, session: AsyncSession = Depends(get_session)) -> TokenPair:
-    return await service.login(session, email=body.email, password_plaintext=body.password)
+async def login(body: LoginRequest) -> TokenPair:
+    return await service.login(email=body.email, password=body.password)
 
 
 @router.post("/refresh", response_model=TokenPair)
-async def refresh(
-    body: RefreshRequest, session: AsyncSession = Depends(get_session)
-) -> TokenPair:
-    return await service.refresh(session, refresh_token=body.refresh_token)
+async def refresh(body: RefreshRequest) -> TokenPair:
+    return await service.refresh(refresh_token=body.refresh_token)
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     body: LogoutRequest,
-    session: AsyncSession = Depends(get_session),
+    access_token: str = Depends(oauth2_scheme),
     current_user=Depends(get_current_user),
 ) -> None:
-    await service.logout(session, refresh_token=body.refresh_token, user_id=current_user.id)
+    await service.logout(access_token=access_token)
 
 
 @router.get("/me", response_model=UserPublic)

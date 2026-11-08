@@ -4,14 +4,15 @@ from logging.config import fileConfig
 from sqlalchemy import pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-import app.database.models
 from alembic import context
 from app.core.config import settings
+from app.database import models  # noqa: F401
 from app.database.base import Base
 
 config = context.config
 
-config.set_main_option("sqlalchemy.url", settings.database_url)
+if not config.get_main_option("sqlalchemy.url"):
+    config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
@@ -63,6 +64,7 @@ def run_migrations_online() -> None:
             config.get_section(config.config_ini_section, {}),
             prefix="sqlalchemy.",
             poolclass=pool.NullPool,
+            connect_args={"statement_cache_size": 0},
         )
         async with engine.connect() as connection:
             await connection.run_sync(do_run_migrations)

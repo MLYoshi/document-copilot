@@ -1,8 +1,3 @@
-"""Reciprocal Rank Fusion for merging two ranked retrieval lists.
-
-Pure function, no I/O: two chunk-id lists ordered best-first go in, one
-fused list of ``(chunk_id, rrf_score)`` pairs ordered best-first comes out.
-"""
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -11,14 +6,6 @@ from collections.abc import Sequence
 def fuse(
     ranked_a: Sequence[str], ranked_b: Sequence[str], k: int = 60
 ) -> list[tuple[str, float]]:
-    """Fuse two ranked id lists with Reciprocal Rank Fusion.
-
-    Each id contributes ``1 / (k + rank)`` per list it appears in, with
-    ``rank`` starting at 1 for the best position. Ids present in only one
-    list still accumulate their single-sided contribution, so a strong
-    keyword hit with no semantic match is not discarded. Ties keep the
-    order in which ids were first seen (``ranked_a`` before ``ranked_b``).
-    """
     if k < 1:
         raise ValueError("k must be >= 1")
 

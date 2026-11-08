@@ -11,7 +11,6 @@ from app.database.base import Base
 
 if TYPE_CHECKING:
     from app.database.models.chat_thread import ChatThread
-    from app.database.models.message_citation import MessageCitation
 
 
 class MessageRole(str, enum.Enum):
@@ -35,12 +34,12 @@ class ChatMessage(Base):
         Enum(MessageRole, name="message_role"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    ai_sdk_message: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
+    # [{"chunk_id": str, "ordinal": int, "quote": str | None}, ...]
+    citations: Mapped[list] = mapped_column(
+        JSONB, nullable=False, server_default=text("'[]'::jsonb")
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
     thread: Mapped["ChatThread"] = relationship(back_populates="messages")
-    citations: Mapped[list["MessageCitation"]] = relationship(
-        back_populates="message", cascade="all, delete-orphan"
-    )

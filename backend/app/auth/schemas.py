@@ -3,7 +3,7 @@ from uuid import UUID
 from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
-def _validate_bcrypt_length(value: str) -> str:
+def _validate_password_length(value: str) -> str:
     if len(value.encode("utf-8")) > 72:
         raise ValueError("password must be at most 72 bytes")
     return value
@@ -18,7 +18,7 @@ class RegisterRequest(BaseModel):
     password: str = Field(min_length=8)
 
     _normalize_email = field_validator("email")(_normalize_email)
-    _bcrypt_length = field_validator("password")(_validate_bcrypt_length)
+    _password_length = field_validator("password")(_validate_password_length)
 
 
 class LoginRequest(BaseModel):
@@ -26,7 +26,7 @@ class LoginRequest(BaseModel):
     password: str
 
     _normalize_email = field_validator("email")(_normalize_email)
-    _bcrypt_length = field_validator("password")(_validate_bcrypt_length)
+    _password_length = field_validator("password")(_validate_password_length)
 
 
 class RefreshRequest(BaseModel):

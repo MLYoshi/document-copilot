@@ -1,59 +1,65 @@
-"""注册/登录/刷新/登出业务逻辑。
-
-函数直接操作 AsyncSession 与 database/ 仓储函数，不建类。
-"""
-import uuid
-
-import structlog
+"""Supabase Auth 注册、登录、刷新、登出与令牌校验。"""
 from fastapi import HTTPException, status
-from sqlalchemy.ext.asyncio import AsyncSession
+from supabase_auth.errors import AuthApiError
+from supabase_auth.types import Session, User
 
-from app.auth import jwt as auth_jwt
-from app.auth import password
 from app.auth.schemas import TokenPair, UserPublic
-from app.database import refresh_tokens, users
-from app.database.models import User
-
-log = structlog.get_logger()
-
-_DUMMY_PASSWORD_HASH = (
-    "$2b$12$C6UzMDM.H6dfI/f/IKcEe.WT8FiFbBoZg0d/8FjVvcnXaIzZGpO8C"
-)
+from app.auth.supabase import get_supabase_client
 
 
-def _to_public(user: User) -> UserPublic:
-    return UserPublic(id=user.id, email=user.email)
+def _tokens(session: Session | None) -> TokenPair:
+    if session is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "authentication failed")
+    return TokenPair(
+        access_token=session.access_token,
+        refresh_token=session.refresh_token,
+    )
 
 
-async def register(session: AsyncSession, email: str, password_plaintext: str) -> UserPublic:
-    password_hash = await password.hash_password(password_plaintext)
+async def register(email: str, password: str) -> UserPublic:
     try:
-        user = await users.create(session, email=email, password_hash=password_hash)
-    except users.UserEmailTakenError:
-        raise HTTPException(status.HTTP_409_CONFLICT, "email already registered")
-    log.info("auth.register", user_id=str(user.id))
-    return _to_public(user)
+        response = await get_supabase_client().auth.sign_up(
+            {"email": email, "password": password}
+        )
+    except AuthApiError as exc:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "registration failed") from exc
+    if response.user is None:
+        raise HTTPException(status.HTTP_400_BAD_REQUEST, "registration failed")
+    return UserPublic(id=response.user.id, email=response.user.email or email)
 
 
-async def login(session: AsyncSession, email: str, password_plaintext: str) -> TokenPair:
-    user = await users.get_by_email(session, email)
-    stored_hash = user.password_hash if user is not None else _DUMMY_PASSWORD_HASH
-    if not await password.verify_password(password_plaintext, stored_hash) or user is None:
-        log.info("auth.login_failed", email_domain=email.rpartition("@")[2])
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid email or password")
-    refresh = await refresh_tokens.issue(session, user.id)
-    log.info("auth.login", user_id=str(user.id))
-    return TokenPair(access_token=auth_jwt.create_access_token(user.id), refresh_token=refresh)
+async def login(email: str, password: str) -> TokenPair:
+    try:
+        response = await get_supabase_client().auth.sign_in_with_password(
+            {"email": email, "password": password}
+        )
+    except AuthApiError as exc:
+        raise HTTPException(
+            status.HTTP_401_UNAUTHORIZED, "invalid email or password"
+        ) from exc
+    return _tokens(response.session)
 
 
-async def refresh(session: AsyncSession, refresh_token: str) -> TokenPair:
-    rotated = await refresh_tokens.rotate(session, refresh_token)
-    if rotated is None:
-        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid refresh token")
-    user_id, new_refresh = rotated
-    return TokenPair(access_token=auth_jwt.create_access_token(user_id), refresh_token=new_refresh)
+async def refresh(refresh_token: str) -> TokenPair:
+    try:
+        response = await get_supabase_client().auth.refresh_session(refresh_token)
+    except AuthApiError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid refresh token") from exc
+    return _tokens(response.session)
 
 
-async def logout(session: AsyncSession, refresh_token: str, user_id: uuid.UUID) -> None:
-    if await refresh_tokens.revoke_for_user(session, refresh_token, user_id):
-        log.info("auth.logout", user_id=str(user_id))
+async def get_user(access_token: str) -> User:
+    try:
+        response = await get_supabase_client().auth.get_user(access_token)
+    except AuthApiError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid access token") from exc
+    if response is None or response.user is None:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "invalid access token")
+    return response.user
+
+
+async def logout(access_token: str) -> None:
+    try:
+        await get_supabase_client().auth.admin.sign_out(access_token)
+    except AuthApiError as exc:
+        raise HTTPException(status.HTTP_401_UNAUTHORIZED, "logout failed") from exc

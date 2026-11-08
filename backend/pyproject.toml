@@ -5,7 +5,6 @@ requires-python = ">=3.12"
 dependencies = [
     "alembic",
     "asyncpg",
-    "bcrypt==5.0.0",
     "beautifulsoup4==4.15.0",
     "email-validator",
     "fastapi",
@@ -16,8 +15,8 @@ dependencies = [
     "pydantic",
     "pydantic-ai",
     "pydantic-settings",
-    "pyjwt",
     "sqlalchemy",
+    "supabase",
     "structlog",
     "uvicorn",
 ]

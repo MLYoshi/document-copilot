@@ -3,9 +3,8 @@ from collections.abc import Sequence
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy.orm import selectinload
 
-from app.database.models import ChatMessage, ChatThread, MessageCitation, MessageRole
+from app.database.models import ChatMessage, ChatThread, MessageRole
 
 
 async def list_for_thread(
@@ -15,7 +14,6 @@ async def list_for_thread(
         select(ChatMessage)
         .join(ChatThread, ChatMessage.thread_id == ChatThread.id)
         .where(ChatMessage.thread_id == thread_id, ChatThread.user_id == user_id)
-        .options(selectinload(ChatMessage.citations))
         .order_by(ChatMessage.created_at)
     )
     return list(result.scalars().all())
@@ -37,16 +35,18 @@ async def save_assistant_turn(
     content: str,
     citations: Sequence[tuple[uuid.UUID, str | None]],
 ) -> ChatMessage:
-    """Persist the assistant message and its ``(chunk_id, quote)`` citations
-    in a single transaction, ordinals assigned in the given order."""
+    """Persist the assistant message with its ``(chunk_id, quote)`` citations
+    as a JSONB array, ordinals assigned in the given order."""
     message = ChatMessage(
-        thread_id=thread_id, role=MessageRole.assistant, content=content
+        thread_id=thread_id,
+        role=MessageRole.assistant,
+        content=content,
+        citations=[
+            {"chunk_id": str(chunk_id), "ordinal": ordinal, "quote": quote}
+            for ordinal, (chunk_id, quote) in enumerate(citations)
+        ],
     )
-    message.citations = [
-        MessageCitation(chunk_id=chunk_id, ordinal=ordinal, quote=quote)
-        for ordinal, (chunk_id, quote) in enumerate(citations)
-    ]
     session.add(message)
     await session.commit()
-    await session.refresh(message, ["citations"])
+    await session.refresh(message)
     return message
