@@ -20,9 +20,8 @@ def test_table_becomes_markdown_table():
 def test_noise_elements_are_stripped():
     md = extract_markdown(_load("mini_10k.html"))
     assert "XBRL hidden fact" not in md
-    assert "noise" not in md  # <script> body
-    assert ".hidden" not in md  # <style> body
-    # hidden ix:nonfraction fact is not leaked outside the rendered table
+    assert "noise" not in md
+    assert ".hidden" not in md
     assert "391035" not in md.replace("$391,035", "")
 
 

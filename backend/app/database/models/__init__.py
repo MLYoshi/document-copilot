@@ -1,5 +1,3 @@
-# Import every model module so SQLAlchemy registers all tables on Base.metadata.
-# Alembic env.py imports this package for autogenerate support.
 from app.database.models.chat_message import ChatMessage, MessageRole
 from app.database.models.chat_thread import ChatThread
 from app.database.models.document_chunk import DocumentChunk

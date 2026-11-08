@@ -67,7 +67,6 @@ async def test_chunks_have_embeddings_metadata_and_search_vector(
             assert "section_path" in chunk.metadata_json
             assert chunk.chunk_index >= 0
 
-        # full-text search is queryable at the SQL level via the generated column
         hits = (
             await session.execute(
                 text(
@@ -134,7 +133,6 @@ async def test_failed_document_is_marked_failed_and_retried_on_rerun(
         assert doc is not None
         assert doc.status is DocumentStatus.failed
 
-    # rerun with a healthy embedder rebuilds only the failed document
     fake_embedder.fail_on = None
     second = await ingest_corpus(
         downloads_dir, session_factory=session_factory, embed=fake_embedder

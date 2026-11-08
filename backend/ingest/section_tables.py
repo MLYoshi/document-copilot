@@ -20,16 +20,11 @@ from pathlib import Path
 
 from bs4 import BeautifulSoup, Tag
 
-# noise stripping and text cleaning must stay identical to extract_markdown:
-# convert_to_markdown.py feeds the same DOM into both.
 from ingest.extractor import _HEADING_TAGS, _clean_text, _strip_noise
 
 MIN_ROWS = 8
 MIN_COLS = 3
 
-# 10-K filings mark up headings as styled <div>s instead of <h*> tags. Three
-# pseudo-levels match the documents' actual structure: Part > Item > bold
-# subheading. Tuned on the real corpus.
 _PART_RE = re.compile(r"^part\s+(?:i|ii|iii|iv)\b\.?", re.IGNORECASE)
 _ITEM_RE = re.compile(r"^item\s+\d+[a-z]?\b", re.IGNORECASE)
 _BOLD_STYLE_RE = re.compile(r"font-weight:\s*(?:bold|[7-9]00)", re.IGNORECASE)
@@ -42,8 +37,6 @@ DEFAULT_OUTPUT_DIR = ROOT / "data" / "tables"
 
 @dataclass
 class ExtractedTable:
-    # 1-based DOM order among extracted tables; the [Table N: caption]
-    # placeholder written by convert_to_markdown uses the same number.
     table_index: int
     caption: str
     section_path: str
@@ -102,12 +95,9 @@ def extract_tables(html: str) -> list[ExtractedTable]:
     headings: list[str] = []
     caption = ""
     for el in body.find_all([*_HEADING_TAGS, "p", "div", "table"]):
-        # table cells wrap text in <p>/<div>; those belong to the table,
-        # not to the surrounding narrative
         if el.name != "table" and el.find_parent("table") is not None:
             continue
         if el.name == "table":
-            # nested tables are already covered by the outer table's <tr>s
             if el.find_parent("table") is not None:
                 continue
             rows = [
@@ -115,7 +105,6 @@ def extract_tables(html: str) -> list[ExtractedTable]:
                 for tr in el.find_all("tr")
                 if (cells := [_clean_text(c.get_text()) for c in tr.find_all(["th", "td"])])
             ]
-            # empty rows are layout spacers, not data
             rows = [row for row in rows if any(row)]
             if not rows:
                 continue
@@ -131,7 +120,6 @@ def extract_tables(html: str) -> list[ExtractedTable]:
                     )
                 )
             continue
-        # only leaf blocks carry text, so nested section <div>s don't count twice
         if el.name == "div" and el.find(["p", "div", "table"]) is not None:
             continue
         text = _clean_text(el.get_text())

@@ -11,8 +11,8 @@ from pydantic import BaseModel
 
 
 class Citation(BaseModel):
-    chunk_id: str  # UUID of the cited chunk; resolved against the retrieval set
-    quote: str  # must be a verbatim substring of the cited chunk's content
+    chunk_id: str
+    quote: str
 
 
 class SourcePassage(BaseModel):

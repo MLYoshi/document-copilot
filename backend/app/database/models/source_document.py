@@ -35,18 +35,16 @@ class SourceDocument(Base):
     )
     title: Mapped[str] = mapped_column(Text, nullable=False)
     source_url: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # ticker, company, filing type, filing date, accession number, ...
     metadata_json: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    content: Mapped[str] = mapped_column(Text, nullable=False)  # normalized markdown
+    content: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus, name="document_status"),
         nullable=False,
         server_default=DocumentStatus.pending.value,
         index=True,
     )
-    # soft delete: chunks and citations must survive document removal
     deleted_at: Mapped[datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True, index=True
     )

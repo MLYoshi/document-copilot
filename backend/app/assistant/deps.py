@@ -22,9 +22,6 @@ class DocumentAgentDeps:
     thread_id: UUID
     retriever: PgVectorRetriever
     grounding_validator: GroundingValidator
-    # Every passage returned by any tool call during the current run,
-    # deduplicated by chunk_id; filled by the agent loop, not the
-    # orchestrator, and used to resolve citations at output validation time.
     passages: list[SourcePassage] = field(default_factory=list)
 
     def add_passages(self, new: list[SourcePassage]) -> None:

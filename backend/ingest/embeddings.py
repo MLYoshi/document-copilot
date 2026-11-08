@@ -41,8 +41,6 @@ async def _embed_document(
     if not chunks:
         raise ValueError(f"no chunks produced for document {document.id}")
 
-    # deleting first makes re-embedding over an earlier partial run a no-op
-    # even without the count check: the next pass sees zero chunks
     await session.execute(
         delete(DocumentChunk).where(DocumentChunk.document_id == document.id)
     )

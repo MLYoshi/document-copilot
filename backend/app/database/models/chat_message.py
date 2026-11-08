@@ -35,7 +35,6 @@ class ChatMessage(Base):
         Enum(MessageRole, name="message_role"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    # AI SDK-compatible message JSON, kept for frontend history replay when useful
     ai_sdk_message: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), nullable=False, server_default=func.now()

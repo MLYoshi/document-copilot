@@ -121,7 +121,7 @@ async def run_question(
     )
     agent = build_agent(model=mock_llm(captured, script))
     result = await answer_question(
-        None,  # the fake retriever never touches the session
+        None,
         user_id=uuid4(),
         thread_id=uuid4(),
         question=QUESTION,
@@ -130,7 +130,6 @@ async def run_question(
     return result, captured, retriever
 
 
-# --- Tool loop mechanics -----------------------------------------------------
 
 
 async def test_agent_searches_then_answers(monkeypatch):
@@ -147,18 +146,14 @@ async def test_agent_searches_then_answers(monkeypatch):
         search_results=passages,
     )
 
-    # the agent drove the retrieval itself, with the user's question
     assert retriever.search_calls == [QUESTION]
     assert result.answer == "Apple sells iPhones."
     assert result.evidence_sufficient is True
     assert [c.chunk_id for c in result.citations] == [CHUNK_A]
-    # passage bodies are restored from the tool-accumulated set, never from the LLM
     assert [p.content for p in result.cited_passages] == [CONTENT_A]
 
 
 async def test_read_chunks_feeds_the_grounding_set(monkeypatch):
-    # CHUNK_C is only ever returned by read_chunks — citing it must still
-    # resolve, proving both tools accumulate into one retrieval set.
     draft = AnswerDraft(
         answer="Services hit a record.",
         citations=[Citation(chunk_id=CHUNK_C, quote="all-time high")],
@@ -182,9 +177,6 @@ async def test_read_chunks_feeds_the_grounding_set(monkeypatch):
 
 
 async def test_passages_accumulate_with_dedupe_across_tool_calls(monkeypatch):
-    # search returns A and B; read_chunks returns B again plus its neighbor C.
-    # The grounding set must be A, B, C with no duplicates — verified by the
-    # validator accepting citations that span all three sources.
     draft = AnswerDraft(
         answer="both",
         citations=[
@@ -246,7 +238,6 @@ async def test_agent_receives_the_question_as_prompt(monkeypatch):
     assert captured["prompts"] == [QUESTION]
 
 
-# --- Instructions contract ---------------------------------------------------
 
 
 async def test_instructions_carry_the_four_product_contract_clauses(monkeypatch):
@@ -259,24 +250,17 @@ async def test_instructions_carry_the_four_product_contract_clauses(monkeypatch)
     )
 
     instructions = captured["instructions"]
-    # 1. answer only from tool-obtained passages, never outside knowledge
     assert "Answer ONLY from passages you obtained through the search_filings" in instructions
     assert "never invent facts" in instructions
-    # 2. every claim must be supported by a verbatim-excerpt citation
     assert "Support every claim with citations" in instructions
-    # 3. insufficient evidence must be declared, not papered over
     assert "evidence_sufficient is true whenever the retrieved passages support" in instructions
-    # 4. factual synthesis only, no investment advice
     assert "Never give investment advice" in instructions
-    # tool guidance: search first, read before quoting, reformulate on miss
     assert "Start with search_filings" in instructions
     assert "read_chunks with the chunk_ids" in instructions
     assert "reformulate the query" in instructions
 
 
 async def test_instructions_do_not_inline_passage_bodies(monkeypatch):
-    # The pre-retrieval injection design is gone: nothing retrieved is baked
-    # into the instructions — the model only sees passages via tool results.
     draft = AnswerDraft(answer="unknown", citations=[], evidence_sufficient=False)
 
     _, captured, _ = await run_question(
@@ -289,7 +273,6 @@ async def test_instructions_do_not_inline_passage_bodies(monkeypatch):
     assert CHUNK_A not in captured["instructions"]
 
 
-# --- Grounding violations ----------------------------------------------------
 
 
 async def test_unknown_chunk_id_raises_grounding_error(monkeypatch):

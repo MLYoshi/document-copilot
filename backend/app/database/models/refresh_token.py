@@ -20,7 +20,6 @@ class RefreshToken(Base):
         nullable=False,
         index=True,
     )
-    # SHA-256 hex digest of the opaque token; the plaintext never touches the DB.
     token_hash: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     created_at: Mapped[datetime] = mapped_column(

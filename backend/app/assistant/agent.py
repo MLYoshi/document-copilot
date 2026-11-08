@@ -27,8 +27,6 @@ from app.assistant.outputs import (
     SourcePassage,
 )
 
-# Search results are summaries; this many leading characters of each chunk
-# let the agent judge relevance without paying for every full body.
 _SNIPPET_LENGTH = 240
 
 
@@ -88,9 +86,6 @@ def build_agent(*, model: Model | None = None) -> Agent[DocumentAgentDeps, Answe
     async def enforce_grounding(
         ctx: RunContext[DocumentAgentDeps], draft: AnswerDraft
     ) -> GroundedAnswer:
-        # Resolves citations against every passage accumulated by tool calls
-        # during the run and raises GroundingError on any violation — the run
-        # fails rather than returning an unfounded answer.
         return ctx.deps.grounding_validator.validate(draft, ctx.deps.passages)
 
     return agent

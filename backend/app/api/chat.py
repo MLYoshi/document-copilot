@@ -51,8 +51,6 @@ async def stream_message(
     session: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
 ) -> StreamingResponse:
-    # 整轮编排与持久化在 handler 内完成，错误在响应头发送前以标准
-    # HTTP 状态码返回；帧序列由 streaming.py 集中编码
     grounded = await service.answer_in_thread(
         session, user_id=current_user.id, thread_id=thread_id, question=body.question
     )

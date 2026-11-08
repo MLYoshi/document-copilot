@@ -16,11 +16,6 @@ class GroundingError(Exception):
     """A drafted answer violated the grounding contract."""
 
 
-# Whitespace runs (including newlines from PDF-ish line wrapping) are collapsed
-# before substring comparison, so a quote split across a line break still
-# matches. HTML entities are decoded too: the ingested corpus keeps them
-# verbatim (``&amp;``), while the model routinely writes the decoded form —
-# a deterministic transform on both sides, not a license to paraphrase.
 _WHITESPACE_RUN = re.compile(r"\s+")
 
 
@@ -75,11 +70,6 @@ class GroundingValidator:
                 )
             quote = _normalize(citation.quote)
             if quote not in _normalize(_anchored_text(passage, passages)):
-                # Adjacent retrieved chunks carry near-identical metadata, and
-                # the model sometimes attaches a quote to the neighbor of the
-                # chunk it actually copied from. Rebinding to the passage the
-                # quote verbatim-matches keeps the answer grounded without
-                # failing the whole run over a mis-aimed pointer.
                 matched = next(
                     (
                         candidate
@@ -94,8 +84,6 @@ class GroundingValidator:
                     )
                 passage = matched
                 citation = citation.model_copy(update={"chunk_id": matched.chunk_id})
-            # Dedupe by chunk_id, keeping the first occurrence; the model may
-            # cite the same passage repeatedly but it resolves to one source.
             if citation.chunk_id not in seen_chunk_ids:
                 seen_chunk_ids.add(citation.chunk_id)
                 citations.append(citation)

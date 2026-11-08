@@ -16,8 +16,6 @@ from app.database.models import User
 
 log = structlog.get_logger()
 
-# Precomputed bcrypt hash used to equalize timing when the user does not exist,
-# so login latency no longer leaks whether an email is registered.
 _DUMMY_PASSWORD_HASH = (
     "$2b$12$C6UzMDM.H6dfI/f/IKcEe.WT8FiFbBoZg0d/8FjVvcnXaIzZGpO8C"
 )

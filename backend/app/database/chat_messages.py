@@ -11,8 +11,6 @@ from app.database.models import ChatMessage, ChatThread, MessageCitation, Messag
 async def list_for_thread(
     session: AsyncSession, thread_id: uuid.UUID, user_id: uuid.UUID
 ) -> list[ChatMessage]:
-    # Joining on chat_threads keeps the row-level isolation contract: querying
-    # another user's thread_id yields an empty list, never its messages.
     result = await session.execute(
         select(ChatMessage)
         .join(ChatThread, ChatMessage.thread_id == ChatThread.id)
@@ -26,8 +24,6 @@ async def list_for_thread(
 async def save_user_message(
     session: AsyncSession, thread_id: uuid.UUID, content: str
 ) -> ChatMessage:
-    # Committed separately from the assistant turn so the question survives
-    # even when answer generation fails afterwards.
     message = ChatMessage(thread_id=thread_id, role=MessageRole.user, content=content)
     session.add(message)
     await session.commit()

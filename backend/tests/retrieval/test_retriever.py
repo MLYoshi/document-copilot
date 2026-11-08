@@ -28,12 +28,7 @@ async def test_semantic_match_outranks_orthogonal_chunks(db_session, seeded_corp
     passages = await retriever.search("iPhone revenue drivers")
 
     assert passages[0].chunk_id == str(seeded_corpus["iphone"].id)
-    # 'iPhone revenue drivers' has no full-text hit (no chunk carries all
-    # three stemmed terms), so scores come from the semantic leg alone:
-    # rank 1 contributes exactly 1/(k+1).
     assert passages[0].score == pytest.approx(1 / (RRF_K + 1))
-    # the runner-up is one of the zero-cosine chunks — exact tie order is
-    # unspecified in Postgres
     assert passages[1].chunk_id in {
         str(seeded_corpus["rnd"].id),
         str(seeded_corpus["exact"].id),
@@ -82,14 +77,10 @@ async def test_keyword_query_semantic_miss_is_hit_by_fulltext_leg(
 
     assert [p.chunk_id for p in passages] == [str(seeded_corpus["exact"].id)]
     assert passages[0].content == EXACT_CONTENT
-    # present in both legs: the fused score exceeds any single-leg
-    # contribution of 1/(k+1)
     assert passages[0].score > 1 / (RRF_K + 1)
 
 
 async def test_both_legs_agreeing_ranks_chunk_first(db_session, seeded_corpus):
-    # Slot 0 is the iPhone direction and its content carries 'iPhone':
-    # semantic rank 1 + full-text rank 1.
     retriever = PgVectorRetriever(
         db_session, embed_by_slot({"iPhone brands": 0}), top_k=8
     )
@@ -140,7 +131,6 @@ async def test_chunks_without_embedding_are_excluded(db_session, seeded_corpus):
 
 
 async def test_empty_corpus_returns_empty_list(db_session, fake_embedder):
-    # db_engine truncates every table, so no seed fixture -> empty corpus
     retriever = PgVectorRetriever(db_session, fake_embedder, top_k=8)
 
     assert await retriever.search("anything at all") == []
@@ -155,7 +145,6 @@ async def test_retriever_embeds_the_user_query(db_session, seeded_corpus):
     assert embed.calls == ["raw question text"]
 
 
-# --- read_chunks (get_chunks) ------------------------------------------------
 
 
 async def test_get_chunks_returns_neighbors_in_document_order(
@@ -165,7 +154,6 @@ async def test_get_chunks_returns_neighbors_in_document_order(
 
     passages = await retriever.get_chunks([str(seeded_corpus["rnd"].id)])
 
-    # rnd is chunk_index 1; window 1 pulls in iphone (0) and unembedded (2)
     assert [p.chunk_id for p in passages] == [
         str(seeded_corpus["iphone"].id),
         str(seeded_corpus["rnd"].id),
@@ -179,7 +167,6 @@ async def test_get_chunks_boundary_chunk_clips_window(db_session, seeded_corpus)
 
     passages = await retriever.get_chunks([str(seeded_corpus["iphone"].id)])
 
-    # iphone is index 0: no left neighbor exists, window clips to 1 on the right
     assert [p.chunk_id for p in passages] == [
         str(seeded_corpus["iphone"].id),
         str(seeded_corpus["rnd"].id),

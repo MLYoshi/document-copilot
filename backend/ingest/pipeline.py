@@ -33,7 +33,6 @@ async def seed_corpus_owner(session: AsyncSession) -> User:
     )
     user = result.scalar_one_or_none()
     if user is None:
-        # random unusable password: the account exists only to own corpus rows
         user = User(
             email=settings.corpus_owner_email,
             password_hash=await hash_password(secrets.token_urlsafe(32)),
@@ -105,8 +104,6 @@ async def _ingest_filing(
         document = SourceDocument(user_id=user_id, content=markdown, **fields)
         session.add(document)
 
-    # pending/failed -> processing, so a crash mid-run is visible as an
-    # incomplete document that the next run will rebuild
     document.content = markdown
     document.status = DocumentStatus.processing
     await session.commit()
@@ -161,8 +158,6 @@ async def ingest_corpus(
 
     async with session_factory() as session:
         user = await seed_corpus_owner(session)
-        # capture the id up front: rollback() below expires ORM objects, and
-        # touching user.id afterwards would trigger a sync lazy refresh
         user_id = user.id
         for filing in manifest["filings"]:
             try:

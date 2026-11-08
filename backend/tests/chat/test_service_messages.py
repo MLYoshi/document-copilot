@@ -85,7 +85,6 @@ async def test_answer_in_thread_persists_user_then_assistant_turn(monkeypatch):
         "save_assistant_turn",
     ]
     assert calls[0][1:] == (thread_id, "How did revenue grow?")
-    # Citation chunk_ids must arrive as real UUIDs for the UUID column
     assert calls[2][3] == [
         (CHUNK_A, "Revenue grew 12%"),
         (CHUNK_B, "12% year over year"),
@@ -135,7 +134,6 @@ async def test_answer_in_thread_returns_404_for_missing_or_foreign_thread(monkey
             session, user_id=uuid4(), thread_id=uuid4(), question="q"
         )
     assert exc_info.value.status_code == 404
-    # Nothing ran: no retrieval, no persistence
     orchestrator_stub.assert_not_called()
 
 
@@ -163,7 +161,6 @@ async def test_answer_in_thread_maps_grounding_error_to_502(monkeypatch):
             session, user_id=uuid4(), thread_id=uuid4(), question="q"
         )
     assert exc_info.value.status_code == 502
-    # Controlled failure: the question is saved, but no half answer is persisted
     saved_assistant.assert_not_called()
 
 

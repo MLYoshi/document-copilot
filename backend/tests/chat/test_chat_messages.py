@@ -101,7 +101,6 @@ async def test_save_assistant_turn_writes_message_and_citations_in_one_transacti
         (chunk_b.id, 1),
     ]
 
-    # verify from a fresh session that the whole turn committed atomically
     async with session_factory() as check:
         reloaded = await chat_messages.list_for_thread(check, thread.id, user.id)
         assert [m.role for m in reloaded] == [MessageRole.assistant]

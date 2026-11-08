@@ -41,7 +41,6 @@ MARKDOWN = (
 
 
 def _write_artifacts(tmp_path, *, markdown: str = MARKDOWN, tables: list | None = None):
-    # artifact layout mirrors the manifest's local_path directories
     markdown_dir = tmp_path / "markdown"
     markdown_file = markdown_dir / "2024" / "aapl_10k.md"
     markdown_file.parent.mkdir(parents=True, exist_ok=True)
@@ -69,7 +68,7 @@ def _existing_document(status: DocumentStatus) -> SourceDocument:
 
 async def test_new_filing_creates_document_and_tables(tmp_path, fake_session):
     markdown_dir, tables_dir = _write_artifacts(tmp_path)
-    fake_session.queue(None)  # _find_document -> no existing document
+    fake_session.queue(None)
 
     outcome = await _load_filing(fake_session, uuid.uuid4(), FILING, markdown_dir, tables_dir)
 
@@ -154,8 +153,6 @@ async def test_load_corpus_reports_per_filing_outcomes(tmp_path, fake_session, f
         encoding="utf-8",
     )
     markdown_dir, tables_dir = _write_artifacts(tmp_path)
-    # the second filing has no markdown artifact: it must fail without
-    # aborting the run (and must have rolled its partial work back)
 
     stats = await load_corpus(
         downloads, markdown_dir, tables_dir, session_factory=fake_session_factory

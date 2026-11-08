@@ -72,7 +72,6 @@ def test_valid_citation_resolves_to_its_passage(validator, passages):
 
 
 def test_quote_split_across_whitespace_still_matches(validator, passages):
-    # line wrapping and collapsed spaces must not break a legitimate quote
     result = validator.validate(
         draft([Citation(chunk_id=CHUNK_A, quote="designs and sells\nsmartphones,")]),
         passages,
@@ -124,11 +123,9 @@ def test_duplicate_citations_dedupe_keeping_first_occurrence(validator, passages
     assert [p.chunk_id for p in result.cited_passages] == [CHUNK_B, CHUNK_A]
 
 
-# --- Quotes spanning chunk boundaries (agent reads neighbor chunks) ---------
 
 
 def _neighbor_passages() -> list[SourcePassage]:
-    # one document, three consecutive chunks
     return [
         positioned_passage(
             CHUNK_A, "Revenue from Data Center computing grew 162%", document_id="d1", chunk_index=0
@@ -151,8 +148,6 @@ def test_quote_spanning_adjacent_chunk_boundary_is_accepted(validator):
 
 
 def test_quote_into_non_consecutive_chunk_is_rejected(validator):
-    # indexes 0 and 2 are not contiguous — nothing bridges the gap, so a
-    # quote spanning both must not validate
     passages = [
         positioned_passage(CHUNK_A, "alpha", document_id="d1", chunk_index=0),
         positioned_passage(CHUNK_B, "omega", document_id="d1", chunk_index=2),
@@ -165,7 +160,6 @@ def test_quote_into_non_consecutive_chunk_is_rejected(validator):
 
 
 def test_quote_across_different_documents_is_rejected(validator):
-    # same index, different documents — never joined
     passages = [
         positioned_passage(CHUNK_A, "alpha", document_id="d1", chunk_index=0),
         positioned_passage(CHUNK_B, "omega", document_id="d2", chunk_index=1),
@@ -178,8 +172,6 @@ def test_quote_across_different_documents_is_rejected(validator):
 
 
 def test_html_entities_in_corpus_decode_for_comparison(validator):
-    # the ingested corpus keeps entities verbatim; the model writes the
-    # decoded form — both normalize to the same text
     passages = [
         positioned_passage(
             CHUNK_A,
@@ -198,9 +190,6 @@ def test_html_entities_in_corpus_decode_for_comparison(validator):
 
 
 def test_quote_aimed_at_wrong_chunk_is_rebound_to_the_matching_one(validator):
-    # the model attached a quote to a chunk it did not copy from; the quote
-    # verbatim-matches another retrieved passage, so the citation is rebound
-    # instead of failing the run
     passages = [
         positioned_passage(CHUNK_A, "alpha bravo", document_id="d1", chunk_index=0),
         positioned_passage(CHUNK_B, "charlie delta", document_id="d2", chunk_index=0),

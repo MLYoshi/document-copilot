@@ -30,7 +30,6 @@ async def list_threads(session: AsyncSession, user_id: UUID) -> list[ThreadPubli
 
 async def get_thread(session: AsyncSession, thread_id: UUID, user_id: UUID) -> ThreadPublic:
     thread = await chat_threads.get_for_user(session, thread_id=thread_id, user_id=user_id)
-    # 404 而非 403：非属主与不存在不可区分，避免泄露资源存在性
     if thread is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "thread not found")
     return ThreadPublic.model_validate(thread)
@@ -39,7 +38,6 @@ async def get_thread(session: AsyncSession, thread_id: UUID, user_id: UUID) -> T
 async def _require_thread(
     session: AsyncSession, thread_id: UUID, user_id: UUID
 ) -> None:
-    # 404 而非 403：非属主与不存在不可区分，避免泄露资源存在性
     thread = await chat_threads.get_for_user(
         session, thread_id=thread_id, user_id=user_id
     )

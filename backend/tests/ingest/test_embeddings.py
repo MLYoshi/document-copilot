@@ -28,7 +28,7 @@ def _document(content: str = CONTENT, status: DocumentStatus = DocumentStatus.co
 
 async def test_completed_document_is_chunked_and_embedded(fake_session, fake_embedder):
     document = _document()
-    fake_session.queue([document], 0)  # select docs, then chunk count 0
+    fake_session.queue([document], 0)
 
     stats = await embed_corpus(
         session_factory=lambda: fake_session, embed=fake_embedder
@@ -43,13 +43,12 @@ async def test_completed_document_is_chunked_and_embedded(fake_session, fake_emb
         assert chunk.token_count > 0
         assert "section_path" in chunk.metadata_json
         assert len(chunk.embedding) == 1024
-    # one embed call with all chunk contents, one commit
     assert fake_embedder.batches == [[c.content for c in chunks]]
     assert fake_session.commits == 1
 
 
 async def test_document_with_existing_chunks_is_skipped(fake_session, fake_embedder):
-    fake_session.queue([_document()], 3)  # already carries chunks
+    fake_session.queue([_document()], 3)
 
     stats = await embed_corpus(
         session_factory=lambda: fake_session, embed=fake_embedder
@@ -71,7 +70,6 @@ async def test_every_completed_document_is_embedded_in_one_run(fake_session, fak
     assert stats == {"processed": 2, "skipped": 0, "failed": 0}
     chunks = [o for o in fake_session.added if isinstance(o, DocumentChunk)]
     assert {c.document_id for c in chunks} == {d.id for d in docs}
-    # chunk_index restarts per document
     by_doc = {d.id: sorted(c.chunk_index for c in chunks if c.document_id == d.id) for d in docs}
     assert all(indices == list(range(len(indices))) for indices in by_doc.values())
 

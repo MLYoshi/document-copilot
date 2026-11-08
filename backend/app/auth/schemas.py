@@ -4,14 +4,12 @@ from pydantic import BaseModel, EmailStr, Field, field_validator
 
 
 def _validate_bcrypt_length(value: str) -> str:
-    # bcrypt rejects input above 72 *bytes*; pydantic's max_length counts characters.
     if len(value.encode("utf-8")) > 72:
         raise ValueError("password must be at most 72 bytes")
     return value
 
 
 def _normalize_email(value: str) -> str:
-    # EmailStr only normalizes the domain part; keep the local part case-insensitive too.
     return value.strip().lower()
 
 

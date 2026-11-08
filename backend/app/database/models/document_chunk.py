@@ -28,15 +28,9 @@ class DocumentChunk(Base):
     chunk_index: Mapped[int] = mapped_column(Integer, nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
     token_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    # page, section, source offsets, ...
     metadata_json: Mapped[dict] = mapped_column(
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
-    # Width follows settings rather than a literal: pgvector will not cast
-    # between widths, so a column that disagrees with what the embedder returns
-    # only fails on the first real write — after the embeddings are paid for.
-    # The migration must be retyped alongside; tests/ingest/test_schema.py
-    # guards the pair.
     embedding = mapped_column(VECTOR(settings.embedding_dimensions), nullable=True)
     search_vector = mapped_column(
         TSVECTOR,

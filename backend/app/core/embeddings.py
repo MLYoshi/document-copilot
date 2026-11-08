@@ -12,7 +12,6 @@ from openai import AsyncOpenAI
 
 from app.core.config import settings
 
-# OpenRouter's free tier throttles hard on larger batches
 EMBED_BATCH_SIZE = 100
 
 EmbedFn = Callable[[list[str]], Awaitable[list[list[float]]]]
@@ -36,14 +35,9 @@ async def get_embedding(texts: list[str]) -> list[list[float]]:
             model=settings.embedding_model,
             input=batch,
             dimensions=settings.embedding_dimensions,
-            # the OpenAI SDK defaults to base64, which OpenRouter's upstream
-            # providers reject outright
             encoding_format="float",
         )
         for item in response.data:
-            # OpenRouter routes `:free` models by load, so upstream providers
-            # disagree on width even when `dimensions` is sent. Check rather
-            # than trust: a wrong width would poison the pgvector column.
             if len(item.embedding) != settings.embedding_dimensions:
                 raise ValueError(
                     f"unexpected embedding dimension {len(item.embedding)}, "

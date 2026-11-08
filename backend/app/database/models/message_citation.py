@@ -30,6 +30,6 @@ class MessageCitation(Base):
         index=True,
     )
     ordinal: Mapped[int] = mapped_column(Integer, nullable=False)
-    quote: Mapped[str | None] = mapped_column(Text, nullable=True)  # cited excerpt for display
+    quote: Mapped[str | None] = mapped_column(Text, nullable=True)
 
     message: Mapped["ChatMessage"] = relationship(back_populates="citations")

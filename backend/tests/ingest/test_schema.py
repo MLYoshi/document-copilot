@@ -14,14 +14,11 @@ from app.database.models import DocumentChunk
 
 
 def test_orm_embedding_width_tracks_settings():
-    # guards against the width being hardcoded back into the model
     assert DocumentChunk.__table__.c.embedding.type.dim == settings.embedding_dimensions
 
 
 @pytest.mark.integration
 async def test_migrated_column_width_tracks_settings(db_session):
-    # migrations cannot import settings, so check the live catalog instead of
-    # the revision files — this is what catches a retype that was never applied
     column_type = (
         await db_session.execute(
             text(

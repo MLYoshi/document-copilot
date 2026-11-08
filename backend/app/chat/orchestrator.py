@@ -26,7 +26,7 @@ async def answer_question(
     user_id: UUID,
     thread_id: UUID,
     question: str,
-    agent=None,  # Agent[DocumentAgentDeps, ...]; injectable for mock-LLM tests
+    agent=None,
 ) -> GroundedAnswer:
     """Answer ``question`` from passages the agent retrieves via its tools.
 

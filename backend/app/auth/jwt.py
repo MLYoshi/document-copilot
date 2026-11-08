@@ -28,7 +28,6 @@ def decode_access_token(token: str) -> UUID:
             token,
             settings.jwt_secret_key,
             algorithms=[settings.jwt_algorithm],
-            # Missing claims in an otherwise validly-signed token → 401, not 500.
             require=["exp", "sub"],
         )
     except jwt.PyJWTError as exc:

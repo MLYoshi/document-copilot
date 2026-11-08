@@ -77,8 +77,6 @@ async def _load_filing(
     markdown = md_path.read_text(encoding="utf-8")
     tables = _load_tables(_tables_path(tables_dir, filing))
 
-    # every placeholder must have a stored table, otherwise section_path
-    # linking downstream would hit gaps
     indices = _placeholder_indices(markdown)
     stored = {t["table_index"] for t in tables}
     missing = indices - stored

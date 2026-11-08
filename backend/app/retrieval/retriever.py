@@ -15,9 +15,6 @@ from app.core.config import settings
 from app.core.embeddings import EmbedFn
 from app.retrieval.rrf import fuse
 
-# Raw SQL with a text-cast vector, same pattern proven in ingest/smoke.py:
-# binding the ORM VECTOR type would require registering an asyncpg codec,
-# which the cast approach sidesteps entirely.
 _OWNER_FILTER = (
     "JOIN source_documents d ON d.id = c.document_id "
     "JOIN users u ON u.id = d.user_id "
@@ -30,8 +27,6 @@ _PASSAGE_COLUMNS = (
     "d.title, d.source_url, d.metadata_json AS doc_meta "
 )
 
-# Rank-only legs: chunk ids in best-first order, kept lean because only the
-# ordering feeds RRF; passage bodies are fetched once for the fused winners.
 _SEMANTIC_RANK_SQL = text(
     "SELECT c.id FROM document_chunks c "
     + _OWNER_FILTER

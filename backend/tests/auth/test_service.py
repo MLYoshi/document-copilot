@@ -136,5 +136,4 @@ async def test_logout_ignores_other_users_token(session, monkeypatch):
 
     monkeypatch.setattr(service.refresh_tokens, "revoke_for_user", fake_revoke_for_user)
 
-    # foreign token: no error, just a no-op — the caller's tokens stay untouched
     await service.logout(session, "foreign-token", user_id=uuid4())

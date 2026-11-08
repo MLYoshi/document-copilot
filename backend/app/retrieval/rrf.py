@@ -28,8 +28,6 @@ def fuse(
     for sequence in (ranked_a, ranked_b):
         ranked_ids: set[str] = set()
         for rank, chunk_id in enumerate(sequence, start=1):
-            # A well-formed retrieval list ranks each chunk once; if a caller
-            # slips duplicates in, the better (earlier) rank is the one that counts.
             if chunk_id in ranked_ids:
                 continue
             ranked_ids.add(chunk_id)

@@ -6,7 +6,6 @@ from app.auth.schemas import LoginRequest, RegisterRequest
 
 def test_register_accepts_valid_payload():
     body = RegisterRequest(email="Analyst@Example.COM", password="password123")
-    # local part is case-insensitive for us; domain is normalized by EmailStr
     assert body.email == "analyst@example.com"
 
 
@@ -16,7 +15,6 @@ def test_register_rejects_short_password():
 
 
 def test_register_rejects_password_over_72_bytes():
-    # 30 chars but 90 bytes in UTF-8: pydantic max_length alone would miss this.
     with pytest.raises(ValidationError):
         RegisterRequest(email="a@example.com", password="密" * 30)
 

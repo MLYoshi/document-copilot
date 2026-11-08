@@ -22,9 +22,6 @@ def _big_table(rows: int = 10, cols: int = 3) -> str:
 
 
 def test_mini_10k_has_no_tables_worth_storing():
-    # its only table is 3 rows (below MIN_ROWS) and it carries hidden XBRL
-    # noise: if anything leaks out here, convert_to_markdown's DOM assumptions
-    # have drifted from section_tables'
     assert extract_tables(MINI_10K) == []
 
 

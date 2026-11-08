@@ -21,8 +21,6 @@ iPhone_CONTENT = (
 )
 RND_CONTENT = "Investment in research and development grew to fund new silicon."
 HIDDEN_CONTENT = "This chunk belongs to a deleted document and must stay hidden."
-# Carries an exact identifier that keyword queries match but semantic
-# retrieval cannot: its vector is orthogonal to every other test query.
 EXACT_CONTENT = (
     "The aggregate purchase price was $1,234,567,890 recorded under "
     "agreement No. 0098765432 with the underwriters."
@@ -43,7 +41,7 @@ def embed_by_slot(slot_by_query: dict[str, int]):
         calls.extend(texts)
         return [slot_vector(slot_by_query[t]) for t in texts]
 
-    embed.calls = calls  # type: ignore[attr-defined]
+    embed.calls = calls
     return embed
 
 

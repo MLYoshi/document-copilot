@@ -47,12 +47,6 @@ async def test_corpus_question_returns_citations_inside_the_retrieval_set(
     assert result.evidence_sufficient is True
     assert result.citations
 
-    # The agent loop retrieves through its own tool calls (possibly with a
-    # reformulated query, possibly reading neighbor chunks), so the retrieval
-    # set is whatever the tools accumulated — replaying search(question)
-    # independently no longer reproduces it. The enforceable invariant is
-    # weaker and still meaningful: every citation points at a real chunk of
-    # the corpus owner's filings, with verbatim-matching text.
     cited_ids = {c.chunk_id for c in result.citations}
     rows = (
         (
@@ -82,7 +76,6 @@ async def test_corpus_question_returns_citations_inside_the_retrieval_set(
         .all()
     )
     assert {str(chunk_id) for chunk_id in owner_chunk_ids} == cited_ids
-    # cited_passages are the exact DB rows, not model-invented text
     assert {str(r.id): r.content for r in rows} == {
         p.chunk_id: p.content for p in result.cited_passages
     }

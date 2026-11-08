@@ -22,6 +22,6 @@ async def test_hashes_are_salted():
 
 async def test_multibyte_password_roundtrip():
     """72 bytes is bcrypt's hard limit; multibyte input below it must work."""
-    password = "密" * 24  # 24 chars = 72 bytes exactly
+    password = "密" * 24
     h = await hash_password(password)
     assert await verify_password(password, h)

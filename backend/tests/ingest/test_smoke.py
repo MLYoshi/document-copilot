@@ -27,8 +27,6 @@ async def test_smoke_round_trip_leaves_no_rows_behind(
     assert report.chunks_written > 0
     assert report.dimensions == settings.embedding_dimensions
 
-    # the smoke document must not linger in the corpus, or the next full ingest
-    # would trip over a filing that is not in the manifest
     leftovers = (
         (
             await db_session.execute(

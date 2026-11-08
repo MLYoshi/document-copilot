@@ -49,7 +49,6 @@ def test_frame_sequence_matches_protocol():
         "data-evidence",
         "finish",
     ]
-    # text parts share the same id so the client can assemble them
     text_ids = {event["id"] for event in events if "id" in event and event["type"].startswith("text-")}
     assert text_ids == {"answer"}
 
@@ -102,6 +101,5 @@ def test_frames_are_valid_sse_and_keep_unicode():
     frames = build_answer_events(answer)
 
     assert all(frame.startswith("data: ") and frame.endswith("\n\n") for frame in frames)
-    # CJK stays readable instead of being \u-escaped
     assert any("数据中心收入增长" in frame for frame in frames)
     assert json.loads(frames[2].removeprefix("data: "))["delta"] == answer.answer

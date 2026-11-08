@@ -36,8 +36,6 @@ logger = structlog.get_logger()
 
 DEFAULT_DOWNLOADS_DIR = Path(__file__).resolve().parents[2] / "data" / "downloads"
 DEFAULT_CHUNK_COUNT = 3
-# an accession the real corpus can never contain, so the cleanup in run_smoke
-# cannot delete anything but its own rows
 SMOKE_ACCESSION = "smoke-test-local"
 
 
@@ -99,14 +97,10 @@ async def run_smoke(
             )
         await session.commit()
 
-        # rollback() below expires ORM objects, so hold on to the id instead
         document_id = document.id
         try:
             return await _verify(session, document_id, vectors[0])
         finally:
-            # the rows are already committed, so discarding this transaction
-            # loses nothing — and it is required for the delete to run at all
-            # when _verify failed and left the transaction aborted
             await session.rollback()
             await session.execute(
                 delete(SourceDocument).where(SourceDocument.id == document_id)
@@ -138,17 +132,12 @@ async def _verify(
                 f"chunk {chunk.chunk_index} came back {len(chunk.embedding)}-dimensional, "
                 f"expected {settings.embedding_dimensions}"
             )
-        # an empty section_path is legitimate — the cover page of a 10-K sits
-        # before any heading — but a missing key means the chunker and the
-        # stored schema have drifted apart
         if "section_path" not in chunk.metadata_json:
             raise ValueError(
                 f"chunk {chunk.chunk_index} has no section_path key: "
                 "the chunker no longer matches the document schema"
             )
 
-    # the nearest neighbour of a vector must be the chunk it came from — this
-    # is what proves the HNSW index is actually usable, not just present
     nearest = (
         await session.execute(
             text(

@@ -7,44 +7,26 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
-    # Database
     database_url: str
 
-    # JWT auth
     jwt_secret_key: str
     jwt_algorithm: str = "HS256"
     jwt_access_token_expire_minutes: int = 30
     jwt_refresh_token_expire_days: int = 30
 
-    # OpenRouter (LLM / embeddings) — OpenAI-compatible endpoint
     openrouter_api_key: str | None = None
     openrouter_base_url: str = "https://openrouter.ai/api/v1"
-    # The model has to satisfy two limits at once: pgvector refuses to index
-    # vectors wider than 2000 dimensions, and chunks run to ~800 tokens.
-    # bge-m3 is 1024-dim and takes long inputs; liquid/lfm-2.5-embedding-350m
-    # is 1024-dim too but caps input at 512 tokens, so it cannot be used here.
     embedding_model: str = "baai/bge-m3"
     embedding_dimensions: int = 1024
 
-    # Chat model used by the assistant agent (OpenRouter model slug)
     chat_model: str = "minimax/minimax-m3:free"
-    # Hard cap on passages returned by one search_filings call (context size
-    # is the real bottleneck of the agent-loop design)
     retrieval_top_k: int = 8
-    # Each retrieval leg (semantic / full-text) fetches this deep before RRF
-    # fusion; must cover top_k so fused ranks are meaningful
     retrieval_fetch_depth: int = 20
-    # RRF smoothing constant: rank 1 contributes 1/(k+1)
     rrf_k: int = 60
-    # Adjacent chunks fetched on each side by read_chunks (context for
-    # grounding checks across chunk boundaries)
     read_chunk_window: int = 1
 
-    # CORS
     allowed_origins: str = "http://localhost:5173"
 
-    # Ingest
-    # Shared corpus documents are owned by this virtual system user
     corpus_owner_email: str = "corpus@system.local"
 
     @field_validator("database_url", "jwt_secret_key")
@@ -57,8 +39,6 @@ class Settings(BaseSettings):
     @field_validator("jwt_secret_key")
     @classmethod
     def _sufficient_key_length(cls, value: str) -> str:
-        # RFC 7518 recommends >= 32 bytes for HS256; shorter keys are rejected
-        # at startup so a placeholder secret never reaches production.
         if len(value.encode()) < 32:
             raise ValueError("jwt_secret_key must be at least 32 bytes (e.g. `openssl rand -hex 32`)")
         return value
@@ -71,9 +51,6 @@ class Settings(BaseSettings):
         return value
 
     def require_openrouter_api_key(self) -> str:
-        # Kept optional at settings level so key-less environments can still
-        # run the fast test suite; callers that actually hit OpenRouter must
-        # go through here and fail fast with a clear error.
         if not self.openrouter_api_key:
             raise RuntimeError("OPENROUTER_API_KEY is required for OpenRouter calls")
         return self.openrouter_api_key
