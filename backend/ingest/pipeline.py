@@ -5,16 +5,16 @@ from pathlib import Path
 from typing import Literal
 
 import structlog
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from supabase_auth.types import User
 
 from app.auth.supabase import get_supabase_admin_client
 from app.core.config import settings
 from app.core.embeddings import EmbedFn, get_embedding
-from app.database.models import DocumentChunk, DocumentStatus, SourceDocument
+from app.core.summarizer import SummarizeFn, get_summary
+from app.database.models import DocumentStatus, SourceDocument
 from app.database.session import session_factory as default_session_factory
-from ingest.chunker import chunk_markdown
 from ingest.extractor import extract_markdown
 
 logger = structlog.get_logger()
@@ -61,7 +61,6 @@ async def _find_document(
 
 
 def _document_fields(filing: dict[str, str]) -> dict:
-    """Manifest-derived columns, shared by the create and rebuild paths."""
     return {
         "title": f"{filing['ticker']} {filing['form']} ({filing['filing_date']})",
         "source_url": filing.get("source_url"),
@@ -86,6 +85,7 @@ async def _ingest_filing(
     filing: dict[str, str],
     downloads_dir: Path,
     embed: EmbedFn,
+    summarize: SummarizeFn,
 ) -> Literal["processed", "skipped"]:
     accession = filing["accession_number"]
     existing = await _find_document(session, user_id, accession)
@@ -94,38 +94,24 @@ async def _ingest_filing(
 
     html = (downloads_dir / filing["local_path"]).read_text(encoding="utf-8")
     markdown = extract_markdown(html)
-    chunks = chunk_markdown(markdown)
-    if not chunks:
+    if not markdown.strip():
         raise ValueError(f"no content extracted from {filing['local_path']}")
+
+    summary = await summarize(markdown)
+    (summary_vector,) = await embed([summary])
 
     fields = _document_fields(filing)
     if existing is not None:
         document = existing
         for key, value in fields.items():
             setattr(document, key, value)
-        await session.execute(
-            delete(DocumentChunk).where(DocumentChunk.document_id == document.id)
-        )
     else:
         document = SourceDocument(user_id=user_id, content=markdown, **fields)
         session.add(document)
 
     document.content = markdown
-    document.status = DocumentStatus.processing
-    await session.commit()
-
-    embeddings = await embed([chunk.content for chunk in chunks])
-
-    for chunk, vector in zip(chunks, embeddings, strict=True):
-        session.add(
-            DocumentChunk(
-                document_id=document.id,
-                chunk_index=chunk.chunk_index,
-                content=chunk.content,
-                metadata_json=dict(chunk.metadata),
-                embedding=vector,
-            )
-        )
+    document.summary = summary
+    document.summary_embedding = summary_vector
     document.status = DocumentStatus.completed
     await session.commit()
     return "processed"
@@ -148,26 +134,29 @@ async def ingest_corpus(
     *,
     session_factory: async_sessionmaker | None = None,
     embed: EmbedFn | None = None,
+    summarize: SummarizeFn | None = None,
+    only: str | None = None,
 ) -> IngestStats:
-    """Ingest every filing listed in ``downloads_dir/manifest.json``.
-
-    Re-running is idempotent: filings whose document is already ``completed``
-    are skipped; documents in any other state are rebuilt from scratch.
-    Dedup is check-then-insert, so runs must not be concurrent (single-process
-    assumption for a one-shot script).
-    """
     manifest = json.loads((downloads_dir / "manifest.json").read_text(encoding="utf-8"))
+    filings = manifest["filings"]
+    if only is not None:
+        filings = [f for f in filings if f["local_path"] == only]
+        if not filings:
+            raise ValueError(
+                f"manifest 中找不到 local_path 为 {only!r} 的文件"
+            )
     session_factory = session_factory or default_session_factory
     embed = embed or get_embedding
+    summarize = summarize or get_summary
     stats = IngestStats()
 
     async with session_factory() as session:
         user = await seed_corpus_owner(session)
         user_id = user.id
-        for filing in manifest["filings"]:
+        for filing in filings:
             try:
                 outcome = await _ingest_filing(
-                    session, user_id, filing, downloads_dir, embed
+                    session, user_id, filing, downloads_dir, embed, summarize
                 )
             except Exception:
                 await session.rollback()

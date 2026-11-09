@@ -15,7 +15,7 @@ export type Thread = {
 export type MessageRole = "user" | "assistant";
 
 export type Citation = {
-  chunk_id: string;
+  passage_id: string;
   ordinal: number;
   quote: string | null;
 };
@@ -29,9 +29,9 @@ export type Message = {
 };
 
 export type SourcePassage = {
-  chunk_id: string;
+  passage_id: string;
   document_id: string;
-  chunk_index: number;
+  passage_index: number;
   content: string;
   score: number;
   section_path: string;
@@ -52,11 +52,6 @@ export type DataCitationsFrame = {
   id: string;
   data: SourcePassage[];
 };
-export type DataEvidenceFrame = {
-  type: "data-evidence";
-  id: string;
-  data: { evidence_sufficient: boolean };
-};
 export type FinishFrame = { type: "finish" };
 
 export type AnswerStreamFrame =
@@ -65,19 +60,17 @@ export type AnswerStreamFrame =
   | TextDeltaFrame
   | TextEndFrame
   | DataCitationsFrame
-  | DataEvidenceFrame
   | FinishFrame;
 
 // Data parts the backend attaches to the assistant answer, keyed by the
 // part name (chunk type is `data-${name}`). These become typed parts on
-// ChatMessage and drive the citations/evidence UI. `historyCitations` is
+// ChatMessage and drive the citations UI. `historyCitations` is
 // client-constructed only: persisted citations are quote pointers
-// (chunk_id + verbatim quote), while full SourcePassage bodies exist solely
-// on the live stream — history never pretends passages were re-fetched.
+// (passage_id + verbatim quote). SourcePassage contains the complete original
+// filing content selected by summary-vector search.
 export type ChatDataParts = {
   citations: SourcePassage[];
   historyCitations: Citation[];
-  evidence: { evidence_sufficient: boolean };
 };
 
 export type ChatMessageMetadata = {

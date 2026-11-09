@@ -24,7 +24,7 @@ class SendMessageRequest(BaseModel):
 
 
 class CitationPublic(BaseModel):
-    chunk_id: UUID
+    passage_id: UUID
     ordinal: int
     quote: str | None
 

@@ -6,7 +6,7 @@
 
 ![Document Copilot 聊天界面](docs/screenshot-chat.png)
 
-**信任契约是架构核心**：每条事实性陈述都必须引用检索到的原文段落；语料不足时必须明确失败（`evidence_sufficient=False`），绝不返回无据答案。宁可没有答案，也不给「自信但错误」的答案。
+**信任契约是架构核心**：每条事实性陈述都必须引用检索到的文档原文；原文不足时必须在答案中明确说明检索不到支撑，绝不返回无据答案。宁可没有答案，也不给「自信但错误」的答案。
 
 ## 技术栈
 
@@ -16,7 +16,7 @@
 | LLM 编排 | PydanticAI（类型化 agent），OpenAI SDK 经 OpenRouter 网关调用 |
 | 前端 | Vite + React SPA + TypeScript（严格模式），**不是 Next.js** |
 | UI | Tailwind CSS + shadcn/ui |
-| 数据库 | Supabase Postgres + pgvector（语义检索）+ Postgres 全文检索 |
+| 数据库 | Supabase Postgres + pgvector（摘要向量检索） |
 | 迁移 | SQLAlchemy 模型 + Alembic |
 | 认证 | Supabase Auth（邮箱 + 密码、会话刷新、登出） |
 | 依赖管理 | 后端 `uv`，前端 `pnpm` |
@@ -29,15 +29,15 @@ flowchart TB
         direction TB
         I1["SEC EDGAR 10-K / 10-Q"] --> I2["下载"]
         I2 --> I3["HTML 抽取 → Markdown"]
-        I3 --> I4["分块"]
-        I4 --> I5["向量化（bge-m3, 1024 维）"]
+        I3 --> I4["LLM 生成单篇文档总结"]
+        I4 --> I5["总结向量化（bge-m3, 1024 维）"]
         I5 --> I6["写入 Postgres（幂等去重）"]
     end
 
     subgraph db["Supabase Postgres + pgvector"]
         direction LR
         D1["auth.users / chat_threads / chat_messages"]
-        D2["source_documents / document_chunks<br/>(pgvector 1024 维 + tsvector)"]
+        D2["source_documents<br/>(summary + pgvector 1024 维)"]
     end
 
     subgraph online["实时聊天链路（在线）"]
@@ -46,9 +46,8 @@ flowchart TB
         FE -- "JWT Bearer" --> API["FastAPI（Uvicorn, :8000）"]
         API --> AUTH["Supabase Auth<br/>登录/刷新/令牌校验"]
         API --> CHAT["chat/<br/>线程/消息 + 流式编排"]
-        CHAT --> AGENT["assistant/<br/>PydanticAI Agent（唯一 LLM 边界）"]
-        AGENT -- "search_filings / read_chunks" --> RETR["retrieval/<br/>混合检索（向量 + 全文 + RRF）"]
-        GROUND["grounding/<br/>引用逐字校验"] --> AGENT
+        CHAT --> AGENT["assistant/<br/>LangGraph Agent（唯一 LLM 边界）"]
+        AGENT -- "search_filings" --> RETR["retrieval/<br/>摘要向量检索"]
         AGENT --> OR["OpenRouter<br/>(LLM + Embedding)"]
     end
 
@@ -61,12 +60,12 @@ flowchart TB
 
 ### 核心流程
 
-1. **摄入链路（离线）**：`ingest/` 包按 `data/downloads/manifest.json` 逐文件「下载 → HTML 抽取 Markdown → 分块 → 向量化 → 写入 Postgres」。幂等可重跑，check-then-insert 去重，不可并发运行。
-2. **实时聊天链路（在线）**：FastAPI 端点 → JWT 鉴权 → PydanticAI agent 自主检索（工具循环：`search_filings` 返回 chunk 摘要，`read_chunks` 取完整正文）→ 事实依据校验（引用必须逐字落在检索段落内）→ 流式返回带引用答案并持久化。
+1. **摄入链路（离线）**：`ingest/` 包按 `data/downloads/manifest.json` 逐文件「下载 → HTML 抽取 Markdown → LLM 生成单篇总结 → 总结向量化 → 写入 Postgres」。每篇文档只生成一条摘要和一个向量，不创建原文 chunk；幂等可重跑，check-then-insert 去重，不可并发运行。
+2. **实时聊天链路（在线）**：FastAPI 端点 → JWT 鉴权 → LangGraph agent 自主检索（工具循环：`search_filings` 按摘要向量匹配文档并返回完整原文）→ 流式返回带引用答案并持久化。
 
-### 混合检索 + RRF
+### 基于摘要的向量检索
 
-`PgVectorRetriever.search()` 同时跑 pgvector 余弦相似度与 Postgres 全文检索，用倒数排名融合（RRF）合并后取 top_k，按 `corpus_owner_email` 过滤共享语料。
+每篇文档由 LLM 生成一段总结，总结向量（pgvector 余弦）挂在 `source_documents` 上。`PgVectorRetriever.search()` 仅对查询文本生成向量，按摘要向量相似度取 top_k 篇，再把所有命中文档的完整 `content` 原文交给模型作为回答依据，按 `corpus_owner_email` 过滤共享语料。原始 Markdown 不分块、不生成向量。
 
 ## 快速开始
 
@@ -137,9 +136,8 @@ backend/
     api/           # 薄路由层（auth、chat）
     auth/          # Supabase Auth、get_current_user
     chat/          # 线程/消息业务 + 流式编排
-    assistant/     # PydanticAI agent（唯一 LLM 边界）
-    retrieval/     # 混合检索 + RRF
-    grounding/     # 引用逐字校验
+    assistant/     # LangGraph agent（唯一 LLM 边界）
+    retrieval/     # 摘要向量检索
     core/          # config、共享嵌入客户端
     database/      # SQLAlchemy 模型 + 仓储
   ingest/          # 离线摄入流水线

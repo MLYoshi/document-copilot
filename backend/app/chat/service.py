@@ -1,17 +1,12 @@
-"""聊天线程业务逻辑。
-
-函数直接操作 AsyncSession 与 database/ 仓储函数，不建类。
-"""
 from uuid import UUID
 
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.assistant.outputs import GroundedAnswer
+from app.assistant.outputs import AnswerDraft
 from app.chat import orchestrator
 from app.chat.schemas import MessagePublic, ThreadPublic
 from app.database import chat_messages, chat_threads
-from app.grounding.validator import GroundingError
 
 
 async def create_thread(
@@ -52,39 +47,26 @@ async def answer_in_thread(
     thread_id: UUID,
     question: str,
     agent=None,
-) -> GroundedAnswer:
-    """Run one grounded RAG turn and persist both sides of the conversation.
-
-    Ownership is checked first (404 on miss). The user message commits before
-    the orchestrator runs, so a failed answer still leaves the question on
-    record. GroundingError maps to a controlled 502 — an unfounded answer is
-    never returned — and no assistant message is written in that case.
-    """
+) -> AnswerDraft:
     await _require_thread(session, thread_id, user_id)
 
     await chat_messages.save_user_message(session, thread_id, question)
 
-    try:
-        grounded = await orchestrator.answer_question(
-            session,
-            user_id=user_id,
-            thread_id=thread_id,
-            question=question,
-            agent=agent,
-        )
-    except GroundingError as exc:
-        raise HTTPException(
-            status.HTTP_502_BAD_GATEWAY,
-            "证据不足或引用校验失败，已拒绝返回无据答案",
-        ) from exc
+    draft = await orchestrator.answer_question(
+        session,
+        user_id=user_id,
+        thread_id=thread_id,
+        question=question,
+        agent=agent,
+    )
 
     await chat_messages.save_assistant_turn(
         session,
         thread_id,
-        grounded.answer,
-        [(UUID(c.chunk_id), c.quote) for c in grounded.citations],
+        draft.answer,
+        [(UUID(c.passage_id), c.quote) for c in draft.citations],
     )
-    return grounded
+    return draft
 
 
 async def list_messages(

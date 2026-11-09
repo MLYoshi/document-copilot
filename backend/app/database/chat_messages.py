@@ -35,15 +35,13 @@ async def save_assistant_turn(
     content: str,
     citations: Sequence[tuple[uuid.UUID, str | None]],
 ) -> ChatMessage:
-    """Persist the assistant message with its ``(chunk_id, quote)`` citations
-    as a JSONB array, ordinals assigned in the given order."""
     message = ChatMessage(
         thread_id=thread_id,
         role=MessageRole.assistant,
         content=content,
         citations=[
-            {"chunk_id": str(chunk_id), "ordinal": ordinal, "quote": quote}
-            for ordinal, (chunk_id, quote) in enumerate(citations)
+            {"passage_id": str(passage_id), "ordinal": ordinal, "quote": quote}
+            for ordinal, (passage_id, quote) in enumerate(citations)
         ],
     )
     session.add(message)

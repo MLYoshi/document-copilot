@@ -1,16 +1,14 @@
 import enum
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING
 
-from sqlalchemy import DateTime, Enum, Text, func, text
+from pgvector.sqlalchemy import VECTOR
+from sqlalchemy import DateTime, Enum, Index, Text, func, text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from sqlalchemy.orm import Mapped, mapped_column
 
+from app.core.config import settings
 from app.database.base import Base
-
-if TYPE_CHECKING:
-    from app.database.models.document_chunk import DocumentChunk
 
 
 class DocumentStatus(str, enum.Enum):
@@ -35,6 +33,10 @@ class SourceDocument(Base):
         JSONB, nullable=False, server_default=text("'{}'::jsonb")
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
+    summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    summary_embedding = mapped_column(
+        VECTOR(settings.embedding_dimensions), nullable=True
+    )
     status: Mapped[DocumentStatus] = mapped_column(
         Enum(DocumentStatus, name="document_status"),
         nullable=False,
@@ -48,6 +50,11 @@ class SourceDocument(Base):
         DateTime(timezone=True), nullable=False, server_default=func.now()
     )
 
-    chunks: Mapped[list["DocumentChunk"]] = relationship(
-        back_populates="document", cascade="all, delete-orphan"
+    __table_args__ = (
+        Index(
+            "source_documents_summary_embedding_idx",
+            "summary_embedding",
+            postgresql_using="hnsw",
+            postgresql_ops={"summary_embedding": "vector_cosine_ops"},
+        ),
     )

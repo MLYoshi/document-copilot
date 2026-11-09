@@ -1,8 +1,3 @@
-"""Embedding client shared by the offline ingest pipeline and the online retriever.
-
-Both sides must embed into the same pgvector column with the same model, so the
-client, the batching and the width check live here rather than in either caller.
-"""
 from __future__ import annotations
 
 from collections.abc import Awaitable, Callable
@@ -26,7 +21,6 @@ def _client() -> AsyncOpenAI:
 
 
 async def get_embedding(texts: list[str]) -> list[list[float]]:
-    """Embed ``texts`` with the configured model, one vector per input."""
     client = _client()
     vectors: list[list[float]] = []
     for start in range(0, len(texts), EMBED_BATCH_SIZE):

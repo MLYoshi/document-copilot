@@ -18,10 +18,13 @@ class Settings(BaseSettings):
     embedding_dimensions: int = 1024
 
     chat_model: str = "minimax/minimax-m3:free"
+    summary_model: str | None = None  # 默认回退到 chat_model
+    summary_max_input_chars: int = 60000
+
+    langfuse_public_key: str | None = None
+    langfuse_secret_key: str | None = None
+    langfuse_host: str = "https://cloud.langfuse.com"
     retrieval_top_k: int = 8
-    retrieval_fetch_depth: int = 20
-    rrf_k: int = 60
-    read_chunk_window: int = 1
 
     allowed_origins: str = "http://localhost:5173"
 
@@ -34,9 +37,7 @@ class Settings(BaseSettings):
             raise ValueError(f"{info.field_name} must not be empty")
         return value
 
-    @field_validator(
-        "retrieval_top_k", "retrieval_fetch_depth", "rrf_k", "read_chunk_window"
-    )
+    @field_validator("retrieval_top_k", "summary_max_input_chars")
     @classmethod
     def _positive_top_k(cls, value: int) -> int:
         if value < 1:

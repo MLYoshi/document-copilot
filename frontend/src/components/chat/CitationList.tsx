@@ -1,7 +1,5 @@
-// Collapsible source list shown under assistant answers — the product's
-// trust core. Renders full passages when available (live stream), falling
-// back to quote pointers for history messages (the backend persists only
-// chunk_id + quote, never re-fetched passages).
+// Collapsible source list shown under assistant answers. Live answers render
+// retrieved original filings; history messages retain citation ID and quote.
 import { ChevronDown, ExternalLink } from "lucide-react";
 import { useState } from "react";
 
@@ -49,12 +47,6 @@ function PassageCard({
       <blockquote className="mt-3 border-l-2 pl-3 italic text-muted-foreground">
         {passage.content}
       </blockquote>
-      {passage.quote ? (
-        <p className="mt-2 rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">
-          <span className="font-medium">原文引用：</span>
-          {passage.quote}
-        </p>
-      ) : null}
       {passage.source_url ? (
         <a
           href={passage.source_url}
@@ -74,7 +66,7 @@ function PointerCard({ pointer }: { pointer: Citation }) {
   return (
     <div className="rounded-lg border bg-card p-4 text-sm shadow-sm">
       <div className="flex flex-wrap items-center gap-2">
-        <span className="font-semibold">[{pointer.ordinal}] 来源段落</span>
+        <span className="font-semibold">[{pointer.ordinal}] 来源原文</span>
       </div>
       {pointer.quote ? (
         <blockquote className="mt-3 border-l-2 pl-3 italic text-muted-foreground">
@@ -110,10 +102,10 @@ export function CitationList({ passages, pointers }: CitationListProps) {
         <Separator className="my-3" />
         <div className="space-y-3">
           {passages.map((passage, index) => (
-            <PassageCard key={passage.chunk_id} passage={passage} ordinal={index + 1} />
+            <PassageCard key={passage.passage_id} passage={passage} ordinal={index + 1} />
           ))}
           {pointers.map((pointer) => (
-            <PointerCard key={pointer.chunk_id} pointer={pointer} />
+            <PointerCard key={pointer.passage_id} pointer={pointer} />
           ))}
         </div>
       </CollapsibleContent>

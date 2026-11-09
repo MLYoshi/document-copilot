@@ -1,51 +1,33 @@
 from __future__ import annotations
 
 import asyncio
-import uuid
 
 import structlog
-from sqlalchemy import delete, func, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from app.core.embeddings import EmbedFn, get_embedding
-from app.database.models import DocumentChunk, DocumentStatus, SourceDocument
+from app.core.summarizer import SummarizeFn, get_summary
+from app.database.models import DocumentStatus, SourceDocument
 from app.database.session import session_factory as default_session_factory
-from ingest.chunker import chunk_markdown
 
 logger = structlog.get_logger()
 
 
-async def _chunk_count(session: AsyncSession, document_id: uuid.UUID) -> int:
-    result = await session.execute(
-        select(func.count()).select_from(DocumentChunk).where(
-            DocumentChunk.document_id == document_id
-        )
-    )
-    return result.scalar_one()
-
-
 async def _embed_document(
-    session: AsyncSession, document: SourceDocument, embed: EmbedFn
+    session: AsyncSession,
+    document: SourceDocument,
+    embed: EmbedFn,
+    summarize: SummarizeFn,
 ) -> str:
-    chunks = chunk_markdown(document.content)
-    if not chunks:
-        raise ValueError(f"no chunks produced for document {document.id}")
+    if not document.content.strip():
+        raise ValueError(f"no content available for document {document.id}")
 
-    await session.execute(
-        delete(DocumentChunk).where(DocumentChunk.document_id == document.id)
-    )
+    summary = await summarize(document.content)
+    (summary_vector,) = await embed([summary])
 
-    embeddings = await embed([chunk.content for chunk in chunks])
-    for chunk, vector in zip(chunks, embeddings, strict=True):
-        session.add(
-            DocumentChunk(
-                document_id=document.id,
-                chunk_index=chunk.chunk_index,
-                content=chunk.content,
-                metadata_json=dict(chunk.metadata),
-                embedding=vector,
-            )
-        )
+    document.summary = summary
+    document.summary_embedding = summary_vector
     await session.commit()
     return "processed"
 
@@ -54,15 +36,11 @@ async def embed_corpus(
     *,
     session_factory: async_sessionmaker | None = None,
     embed: EmbedFn | None = None,
+    summarize: SummarizeFn | None = None,
 ) -> dict[str, int]:
-    """Embed every completed document that has no chunks yet.
-
-    Re-running is idempotent: documents that already carry chunks are
-    skipped, so a completed document is never embedded twice. Single-process
-    one-shot script, matching the existing ingest assumptions.
-    """
     session_factory = session_factory or default_session_factory
     embed = embed or get_embedding
+    summarize = summarize or get_summary
 
     stats = {"processed": 0, "skipped": 0, "failed": 0}
     async with session_factory() as session:
@@ -70,15 +48,13 @@ async def embed_corpus(
             select(SourceDocument).where(
                 SourceDocument.status == DocumentStatus.completed,
                 SourceDocument.deleted_at.is_(None),
+                SourceDocument.summary_embedding.is_(None),
             )
         )
         documents = result.scalars().all()
         for document in documents:
             try:
-                if await _chunk_count(session, document.id):
-                    stats["skipped"] += 1
-                    continue
-                await _embed_document(session, document, embed)
+                await _embed_document(session, document, embed, summarize)
             except Exception:
                 await session.rollback()
                 logger.exception("embed_document_failed", document_id=str(document.id))
@@ -89,7 +65,7 @@ async def embed_corpus(
 
 
 async def main() -> int:
-    print("Embedding corpus ...")
+    print("Summarizing and embedding corpus ...")
     stats = await embed_corpus()
     print(
         f"Done: {stats['processed']} processed, {stats['skipped']} skipped, "

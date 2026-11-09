@@ -34,7 +34,6 @@ class ChatMessage(Base):
         Enum(MessageRole, name="message_role"), nullable=False
     )
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    # [{"chunk_id": str, "ordinal": int, "quote": str | None}, ...]
     citations: Mapped[list] = mapped_column(
         JSONB, nullable=False, server_default=text("'[]'::jsonb")
     )

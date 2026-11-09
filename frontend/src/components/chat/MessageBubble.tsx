@@ -1,10 +1,7 @@
 // Per-message rendering. User messages are right-aligned primary bubbles;
 // assistant answers are full-width "document" blocks with the citations
-// panel and the evidence-insufficient warning badge.
-import { TriangleAlert } from "lucide-react";
-
+// panel.
 import { CitationList } from "@/components/chat/CitationList";
-import { Badge } from "@/components/ui/badge";
 import type { ChatMessage, Citation, SourcePassage } from "@/chat/types";
 
 type MessageBubbleProps = {
@@ -49,21 +46,12 @@ export function MessageBubble({ message, isStreaming = false }: MessageBubblePro
   const pointers: Citation[] = message.parts.flatMap((part) =>
     part.type === "data-historyCitations" ? part.data : []
   );
-  const evidenceInsufficient = message.parts.some(
-    (part) => part.type === "data-evidence" && !part.data.evidence_sufficient
-  );
 
   return (
     <div className="animate-in fade-in slide-in-from-bottom-1 duration-300">
       <div className="whitespace-pre-wrap break-words text-sm leading-relaxed">
         {text || (isStreaming ? <TypingDots /> : null)}
       </div>
-      {evidenceInsufficient ? (
-        <Badge className="mt-2 border-amber-300 bg-amber-100 text-amber-800 hover:bg-amber-100">
-          <TriangleAlert className="size-3" />
-          证据不足，请谨慎参考
-        </Badge>
-      ) : null}
       <CitationList passages={passages} pointers={pointers} />
     </div>
   );

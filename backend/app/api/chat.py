@@ -51,11 +51,11 @@ async def stream_message(
     session: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
 ) -> StreamingResponse:
-    grounded = await service.answer_in_thread(
+    draft = await service.answer_in_thread(
         session, user_id=current_user.id, thread_id=thread_id, question=body.question
     )
     return StreamingResponse(
-        iter(build_answer_events(grounded)), media_type="text/event-stream"
+        iter(build_answer_events(draft)), media_type="text/event-stream"
     )
 
 
