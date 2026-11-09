@@ -7,6 +7,7 @@ from app.assistant.outputs import AnswerDraft
 from app.chat import orchestrator
 from app.chat.schemas import MessagePublic, ThreadPublic
 from app.database import chat_messages, chat_threads
+from app.database.session import session_factory
 
 
 async def create_thread(
@@ -60,12 +61,16 @@ async def answer_in_thread(
         agent=agent,
     )
 
-    await chat_messages.save_assistant_turn(
-        session,
-        thread_id,
-        draft.answer,
-        [(UUID(c.passage_id), c.quote) for c in draft.citations],
-    )
+    # The LLM call above can take tens of seconds; the original session's
+    # connection may be closed by the pooler while idle. Persist the answer
+    # with a fresh session/connection instead of the stale one.
+    async with session_factory() as fresh_session:
+        await chat_messages.save_assistant_turn(
+            fresh_session,
+            thread_id,
+            draft.answer,
+            [(UUID(c.passage_id), c.quote) for c in draft.citations],
+        )
     return draft
 
 

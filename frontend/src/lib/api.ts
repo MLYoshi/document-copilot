@@ -1,83 +1,123 @@
-import { env } from "@/lib/env";
-import { ApiError, request } from "@/lib/http";
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const ACCESS_TOKEN_KEY = "document_copilot_access_token";
+const REFRESH_TOKEN_KEY = "document_copilot_refresh_token";
 
-// Auth hooks are injected by the auth module (src/auth/auth.ts) via
-// configureAuth, so this layer stays independent of the auth module.
-// The refresh hook must implement single-flight semantics.
-type AuthHooks = {
-  getAccessToken: () => string | null;
-  refreshAccessToken: () => Promise<string>;
-  onAuthFailure: () => void;
-};
+export interface User { id: string; email: string }
+export interface Thread { id: string; title: string; created_at: string; updated_at: string }
+export interface Citation { passage_id: string; ordinal: number; quote: string | null }
+export interface Message { id: string; role: "user" | "assistant"; content: string; created_at: string; citations: Citation[] }
+interface TokenPair { access_token: string; refresh_token: string; token_type: string }
+interface StreamEvent { type: string; delta?: string }
 
-let authHooks: AuthHooks | null = null;
+let accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
+let refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
+let refreshing: Promise<boolean> | null = null;
 
-export function configureAuth(hooks: AuthHooks) {
-  authHooks = hooks;
+export function hasSession() {
+  return Boolean(accessToken && refreshToken);
 }
 
-type RequestOptions = {
-  method?: string;
-  body?: unknown;
-  /** Skip bearer injection and 401 refresh retry (auth endpoints themselves). */
-  auth?: boolean;
-  timeoutMs?: number;
-};
+function saveTokens(tokens: TokenPair) {
+  accessToken = tokens.access_token;
+  refreshToken = tokens.refresh_token;
+  localStorage.setItem(ACCESS_TOKEN_KEY, accessToken);
+  localStorage.setItem(REFRESH_TOKEN_KEY, refreshToken);
+}
 
-async function requestWithAuth<T>(path: string, options: RequestOptions = {}): Promise<T> {
-  const { method, body, auth = true, timeoutMs } = options;
-  const url = `${env.apiBaseUrl}${path}`;
+export function clearSession() {
+  accessToken = null;
+  refreshToken = null;
+  localStorage.removeItem(ACCESS_TOKEN_KEY);
+  localStorage.removeItem(REFRESH_TOKEN_KEY);
+}
 
-  const buildHeaders = (): Record<string, string> => {
-    if (!auth) return {};
-    const token = authHooks?.getAccessToken();
-    return token ? { Authorization: `Bearer ${token}` } : {};
-  };
+function sessionExpired() {
+  clearSession();
+  window.dispatchEvent(new Event("auth:expired"));
+}
 
+async function errorMessage(response: Response) {
   try {
-    return await request<T>(url, { method, body, headers: buildHeaders(), timeoutMs });
-  } catch (error) {
-    if (
-      !auth ||
-      authHooks === null ||
-      !(error instanceof ApiError) ||
-      error.status !== 401
-    ) {
-      throw error;
-    }
+    const body = (await response.json()) as { detail?: string | Array<{ msg: string }> };
+    if (typeof body.detail === "string") return body.detail;
+    if (Array.isArray(body.detail)) return body.detail.map((item) => item.msg).join("；");
+  } catch { /* 非 JSON 响应 */ }
+  return `请求失败（${response.status}）`;
+}
 
-    // Access token expired or invalid: try one refresh, then retry once.
-    let newToken: string;
-    try {
-      newToken = await authHooks.refreshAccessToken();
-    } catch {
-      authHooks.onAuthFailure();
-      throw new ApiError("Session expired. Please sign in again.", { status: 401 });
-    }
+async function tryRefresh() {
+  if (!refreshToken) return false;
+  refreshing ??= fetch(`${API_BASE_URL}/auth/refresh`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ refresh_token: refreshToken }),
+  }).then(async (response) => {
+    if (!response.ok) return false;
+    saveTokens((await response.json()) as TokenPair);
+    return true;
+  }).catch(() => false).finally(() => { refreshing = null; });
+  return refreshing;
+}
 
-    return await request<T>(url, {
-      method,
-      body,
-      headers: { Authorization: `Bearer ${newToken}` },
-      timeoutMs,
-    });
-  }
+async function authorizedFetch(path: string, init: RequestInit = {}, retry = true): Promise<Response> {
+  const headers = new Headers(init.headers);
+  if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
+  const response = await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (response.status !== 401 || !retry) return response;
+  if (await tryRefresh()) return authorizedFetch(path, init, false);
+  sessionExpired();
+  return response;
+}
+
+async function request<T>(path: string, init: RequestInit = {}, authenticated = true): Promise<T> {
+  const headers = new Headers(init.headers);
+  if (init.body) headers.set("Content-Type", "application/json");
+  const response = authenticated
+    ? await authorizedFetch(path, { ...init, headers })
+    : await fetch(`${API_BASE_URL}${path}`, { ...init, headers });
+  if (!response.ok) throw new Error(await errorMessage(response));
+  if (response.status === 204) return undefined as T;
+  return (await response.json()) as T;
 }
 
 export const api = {
-  get<T>(path: string, options: RequestOptions = {}) {
-    return requestWithAuth<T>(path, { method: "GET", ...options });
+  login: async (email: string, password: string) => {
+    const tokens = await request<TokenPair>("/auth/login", { method: "POST", body: JSON.stringify({ email, password }) }, false);
+    saveTokens(tokens);
   },
-  post<T>(path: string, body?: unknown, options: RequestOptions = {}) {
-    return requestWithAuth<T>(path, { method: "POST", body, ...options });
+  register: (email: string, password: string) => request<User>("/auth/register", { method: "POST", body: JSON.stringify({ email, password }) }, false),
+  me: () => request<User>("/auth/me"),
+  logout: async () => {
+    if (!refreshToken) return;
+    await request<void>("/auth/logout", { method: "POST", body: JSON.stringify({ refresh_token: refreshToken }) });
   },
-  put<T>(path: string, body?: unknown, options: RequestOptions = {}) {
-    return requestWithAuth<T>(path, { method: "PUT", body, ...options });
-  },
-  patch<T>(path: string, body?: unknown, options: RequestOptions = {}) {
-    return requestWithAuth<T>(path, { method: "PATCH", body, ...options });
-  },
-  delete<T>(path: string, options: RequestOptions = {}) {
-    return requestWithAuth<T>(path, { method: "DELETE", ...options });
+  threads: () => request<Thread[]>("/threads"),
+  createThread: (title: string) => request<Thread>("/threads", { method: "POST", body: JSON.stringify({ title }) }),
+  messages: (threadId: string) => request<Message[]>(`/threads/${threadId}/messages`),
+  streamMessage: async (threadId: string, question: string, onDelta: (text: string) => void) => {
+    const response = await authorizedFetch(`/threads/${threadId}/messages/stream`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question }),
+    });
+    if (!response.ok) throw new Error(await errorMessage(response));
+    if (!response.body) throw new Error("浏览器不支持流式响应");
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const blocks = buffer.split(/\r?\n\r?\n/);
+      buffer = blocks.pop() ?? "";
+      for (const block of blocks) {
+        const data = block.split(/\r?\n/).filter((line) => line.startsWith("data:")).map((line) => line.slice(5).trimStart()).join("\n");
+        if (!data) continue;
+        const event = JSON.parse(data) as StreamEvent;
+        if (event.type === "text-delta" && event.delta) onDelta(event.delta);
+      }
+    }
   },
 };
