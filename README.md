@@ -1,156 +1,185 @@
 # Document Copilot
 
-面向内部分析师（Driftwood Capital）的 AI 问答机器人：分析师用自然语言查询 SEC 披露文件（10-K / 10-Q）语料，得到**有据可依、可溯源引用**的答案。
+面向 SEC 披露文件的检索增强生成（RAG）问答应用。用户注册登录后，可以围绕已收录的公司文件提问，实时查看流式回答及对应引用，并管理自己的历史会话。
 
-## 界面预览
+## 功能
 
-![Document Copilot 聊天界面](docs/screenshot-chat.png)
-
-**信任契约是架构核心**：每条事实性陈述都必须引用检索到的文档原文；原文不足时必须在答案中明确说明检索不到支撑，绝不返回无据答案。宁可没有答案，也不给「自信但错误」的答案。
+- SEC 文件问答：基于已导入的披露文件检索相关段落，生成有依据的回答。
+- 原文引用：回答附带引用，可展开查看引用原文。
+- 流式输出：通过 SSE 逐段返回回答，减少等待时间。
+- 用户认证：支持注册、登录、退出和令牌自动刷新。
+- 历史会话：支持新建会话、查看会话列表及历史消息。
+- 批量导入：将 HTML 文件提取为 Markdown，生成摘要与向量后写入数据库。
 
 ## 技术栈
 
-| 层 | 选型 |
+| 模块 | 技术 |
 | --- | --- |
-| 后端 | Python 3.12+ + FastAPI + Uvicorn |
-| LLM 编排 | PydanticAI（类型化 agent），OpenAI SDK 经 OpenRouter 网关调用 |
-| 前端 | Vite + React SPA + TypeScript（严格模式），**不是 Next.js** |
-| UI | Tailwind CSS + shadcn/ui |
-| 数据库 | Supabase Postgres + pgvector（摘要向量检索） |
-| 迁移 | SQLAlchemy 模型 + Alembic |
-| 认证 | Supabase Auth（邮箱 + 密码、会话刷新、登出） |
-| 依赖管理 | 后端 `uv`，前端 `pnpm` |
-
-## 架构图
-
-```mermaid
-flowchart TB
-    subgraph ingest["摄入链路（离线，一次性）"]
-        direction TB
-        I1["SEC EDGAR 10-K / 10-Q"] --> I2["下载"]
-        I2 --> I3["HTML 抽取 → Markdown"]
-        I3 --> I4["LLM 生成单篇文档总结"]
-        I4 --> I5["总结向量化（bge-m3, 1024 维）"]
-        I5 --> I6["写入 Postgres（幂等去重）"]
-    end
-
-    subgraph db["Supabase Postgres + pgvector"]
-        direction LR
-        D1["auth.users / chat_threads / chat_messages"]
-        D2["source_documents<br/>(summary + pgvector 1024 维)"]
-    end
-
-    subgraph online["实时聊天链路（在线）"]
-        direction TB
-        U["分析师"] --> FE["React SPA<br/>(Vite + React + TS)"]
-        FE -- "JWT Bearer" --> API["FastAPI（Uvicorn, :8000）"]
-        API --> AUTH["Supabase Auth<br/>登录/刷新/令牌校验"]
-        API --> CHAT["chat/<br/>线程/消息 + 流式编排"]
-        CHAT --> AGENT["assistant/<br/>LangGraph Agent（唯一 LLM 边界）"]
-        AGENT -- "search_filings" --> RETR["retrieval/<br/>摘要向量检索"]
-        AGENT --> OR["OpenRouter<br/>(LLM + Embedding)"]
-    end
-
-    I6 -- "写库" --> db
-    RETR -- "在线侧检索" --> db
-    FE -- "流式返回带引用答案" --> U
-```
-
-两条链路通过**共享的嵌入客户端**（`backend/app/core/embeddings.py`）和**共享的 Supabase Postgres 表**衔接：离线侧写库、在线侧检索，必须用同一嵌入模型和同一向量维度（默认 `baai/bge-m3`，1024 维）。用户身份由 `auth.users` 管理，业务表通过 `user_id` 关联。
-
-### 核心流程
-
-1. **摄入链路（离线）**：`ingest/` 包按 `data/downloads/manifest.json` 逐文件「下载 → HTML 抽取 Markdown → LLM 生成单篇总结 → 总结向量化 → 写入 Postgres」。每篇文档只生成一条摘要和一个向量，不创建原文 chunk；幂等可重跑，check-then-insert 去重，不可并发运行。
-2. **实时聊天链路（在线）**：FastAPI 端点 → JWT 鉴权 → LangGraph agent 自主检索（工具循环：`search_filings` 按摘要向量匹配文档并返回完整原文）→ 流式返回带引用答案并持久化。
-
-### 基于摘要的向量检索
-
-每篇文档由 LLM 生成一段总结，总结向量（pgvector 余弦）挂在 `source_documents` 上。`PgVectorRetriever.search()` 仅对查询文本生成向量，按摘要向量相似度取 top_k 篇，再把所有命中文档的完整 `content` 原文交给模型作为回答依据，按 `corpus_owner_email` 过滤共享语料。原始 Markdown 不分块、不生成向量。
-
-## 快速开始
-
-### 前置要求
-
-- Python 3.12+ 与 [uv](https://docs.astral.sh/uv/)
-- Node.js + pnpm
-- 一个 Supabase 项目（Auth + Postgres + pgvector）
-
-### 后端
-
-```bash
-cd backend
-cp .env.example .env                           # 填入 Supabase 项目与数据库连接信息
-uv sync                                        # 安装依赖
-uv run alembic upgrade head                    # 在 Supabase Postgres 应用迁移
-uv run uvicorn app.main:app --reload           # 启动开发服务器（端口 8000）
-```
-
-### 前端
-
-```bash
-cd frontend
-pnpm install
-cp .env.example .env    # 配置 VITE_API_BASE_URL（如 http://localhost:8000）
-pnpm dev                # 启动开发服务器（端口 5173）
-```
-
-### 语料摄入
-
-```bash
-uv run data/download.py     # 仓库根目录：从 SEC EDGAR 下载 5 份 10-K（AAPL/MSFT/NVDA/AMZN/GOOGL）
-cd backend && uv run -m ingest
-```
-
-## 常用命令
-
-### 后端（在 `backend/` 下）
-
-```bash
-uv run pytest                                  # 全部测试（不含集成测试）
-uv run pytest -m integration                   # 需 TEST_DATABASE_URL 指向独立 Supabase 测试项目
-uv run ruff check . && uv run ruff format .    # lint / 格式化
-uv run alembic revision --autogenerate -m "…"  # 生成迁移（需人工审查）
-```
-
-### 前端（在 `frontend/` 下）
-
-```bash
-pnpm build            # tsc -b && vite build
-pnpm tsc --noEmit     # 类型检查
-pnpm lint             # eslint
-```
-
-## 认证
-
-- 后端通过 Supabase Auth 完成注册、登录、刷新与登出，接口路径保持不变：`POST /auth/register`、`POST /auth/login`、`POST /auth/refresh`、`POST /auth/logout`、`GET /me`。
-- 前端收到 401 时自动用 Supabase refresh token 刷新 access token，失败则跳转登录页；前端无需新增 Supabase SDK。
-- 在 Supabase Dashboard 开启 Email provider。若开启邮箱确认，用户须先完成确认再登录。
-- `SUPABASE_SERVICE_ROLE_KEY` 仅供后端离线摄入使用，严禁写入前端环境变量。
-- 从旧数据库升级前，先在 Supabase Auth 创建对应用户；旧密码哈希与 refresh token 不会迁移，用户需要重新设置密码。
+| 前端 | React 18、TypeScript、Vite、Tailwind CSS、Radix UI |
+| 后端 | Python 3.12、FastAPI、SQLAlchemy、Alembic |
+| Agent | LangGraph、LangChain |
+| 模型服务 | OpenRouter（对话、摘要及向量模型） |
+| 数据存储 | PostgreSQL、pgvector |
+| 身份认证 | Supabase Auth |
+| 可观测性 | Langfuse（可选） |
 
 ## 目录结构
 
 ```text
-backend/
-  app/
-    api/           # 薄路由层（auth、chat）
-    auth/          # Supabase Auth、get_current_user
-    chat/          # 线程/消息业务 + 流式编排
-    assistant/     # LangGraph agent（唯一 LLM 边界）
-    retrieval/     # 摘要向量检索
-    core/          # config、共享嵌入客户端
-    database/      # SQLAlchemy 模型 + 仓储
-  ingest/          # 离线摄入流水线
-  tests/           # pytest（unit + integration）
-frontend/
-  src/
-    components/    # shadcn/ui 基础组件
-    pages/         # 路由级页面
-    chat/          # 聊天组件
-    auth/          # 认证 API 与 token 管理
-    lib/           # http / api / env
-data/              # SEC 语料下载脚本（downloads/ 已 gitignore）
-docs/              # 架构文档与界面截图
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/          # 认证与会话接口
+│   │   ├── assistant/    # LangGraph Agent 与结构化输出
+│   │   ├── auth/         # Supabase 认证
+│   │   ├── chat/         # 会话、消息及流式回答
+│   │   ├── core/         # 配置、向量和摘要
+│   │   ├── database/     # 数据模型与数据库会话
+│   │   └── retrieval/    # pgvector 检索
+│   ├── ingest/           # 文件解析、摘要、向量化及导入
+│   └── alembic/          # 数据库迁移
+├── frontend/
+│   └── src/              # 页面、组件及 API 客户端
+└── data/
+    ├── downloads/        # 原始 HTML 与 manifest.json
+    ├── markdown/         # 已转换的 Markdown 文件
+    └── download.py       # 数据下载脚本
 ```
 
+## 环境要求
 
+- Python 3.12+
+- [uv](https://docs.astral.sh/uv/)
+- Node.js 与 pnpm
+- 已启用 `pgvector` 扩展的 PostgreSQL 数据库
+- Supabase 项目
+- OpenRouter API Key
+
+## 配置
+
+在 `backend/.env` 中配置后端环境变量：
+
+```dotenv
+DATABASE_URL=postgresql+asyncpg://user:password@localhost:5432/document_copilot
+
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+
+OPENROUTER_API_KEY=your-openrouter-api-key
+```
+
+`SUPABASE_SERVICE_ROLE_KEY` 用于数据导入时创建或查找语料所有者，导入前必须配置。认证和会话功能仅使用 Supabase anon key。
+
+常用可选配置：
+
+| 环境变量 | 默认值 | 说明 |
+| --- | --- | --- |
+| `CHAT_MODEL` | `minimax/minimax-m3:free` | OpenRouter 对话模型 |
+| `SUMMARY_MODEL` | 与 `CHAT_MODEL` 相同 | 导入时生成摘要的模型 |
+| `EMBEDDING_MODEL` | `baai/bge-m3` | OpenRouter 向量模型 |
+| `EMBEDDING_DIMENSIONS` | `1024` | 向量维度，应与数据库字段一致 |
+| `RETRIEVAL_TOP_K` | `8` | 每次检索返回的段落数 |
+| `ALLOWED_ORIGINS` | `http://localhost:5173` | 允许的前端来源，多个来源用逗号分隔 |
+| `CORPUS_OWNER_EMAIL` | `corpus@system.local` | 语料所有者的 Supabase 用户邮箱 |
+| `LANGFUSE_PUBLIC_KEY` | 无 | Langfuse 公钥 |
+| `LANGFUSE_SECRET_KEY` | 无 | Langfuse 密钥 |
+| `LANGFUSE_HOST` | `https://cloud.langfuse.com` | Langfuse 服务地址 |
+
+前端默认请求 `http://localhost:8000`。如需修改，在 `frontend/.env` 中配置：
+
+```dotenv
+VITE_API_BASE_URL=http://localhost:8000
+```
+
+请勿提交包含真实密钥的 `.env` 文件。
+
+## 初始化与启动
+
+### 1. 初始化后端
+
+```bash
+cd backend
+uv sync
+uv run alembic upgrade head
+```
+
+### 2. 导入 SEC 文件
+
+在 `data/downloads/manifest.json` 的 `filings` 列表中配置文件元数据，并将对应 HTML 放入 `local_path` 指定的位置。每条记录需要包含：
+
+- `ticker`、`cik`、`form`
+- `filing_date`、`report_date`、`accession_number`
+- `primary_document`、`local_path`
+- `source_url`（可选）
+
+从项目根目录执行：
+
+```bash
+cd backend
+uv run python -m ingest ../data/downloads
+```
+
+仅导入单个文件：
+
+```bash
+uv run python -m ingest ../data/downloads --file path/to/filing.html
+```
+
+导入过程会提取 Markdown、生成摘要和向量，并将文件内容与元数据写入数据库。已经完成的文件会自动跳过。
+
+### 3. 启动后端
+
+```bash
+cd backend
+uv run uvicorn app.main:app --reload
+```
+
+- API 地址：http://localhost:8000
+- Swagger 文档：http://localhost:8000/docs
+- 健康检查：http://localhost:8000/health
+
+### 4. 启动前端
+
+另开终端执行：
+
+```bash
+cd frontend
+pnpm install
+pnpm dev
+```
+
+访问 http://localhost:5173，注册并登录后即可开始提问。使用前请确保数据库中已经导入文件，并正确配置 OpenRouter。
+
+## API 概览
+
+除认证接口与健康检查外，以下接口均需要 `Authorization: Bearer <access_token>` 请求头。
+
+| 方法 | 路径 | 说明 |
+| --- | --- | --- |
+| `POST` | `/auth/register` | 注册用户 |
+| `POST` | `/auth/login` | 登录并获取令牌 |
+| `POST` | `/auth/refresh` | 刷新访问令牌 |
+| `POST` | `/auth/logout` | 退出登录 |
+| `GET` | `/auth/me` | 获取当前用户 |
+| `GET` | `/threads` | 获取当前用户的会话列表 |
+| `POST` | `/threads` | 创建会话 |
+| `GET` | `/threads/{thread_id}` | 获取会话详情 |
+| `GET` | `/threads/{thread_id}/messages` | 获取历史消息 |
+| `POST` | `/threads/{thread_id}/messages/stream` | 发送问题并以 SSE 流式返回答案 |
+| `GET` | `/health` | 健康检查 |
+
+## 常用开发命令
+
+```bash
+# 后端代码检查
+cd backend && uv run ruff check .
+
+# 前端构建
+cd frontend && pnpm build
+
+# 前端代码检查
+cd frontend && pnpm lint
+```
+
+> 回答仅基于当前已收录的 SEC 披露文件。请结合原始文件核验重要信息，不要将生成内容视为投资建议。
