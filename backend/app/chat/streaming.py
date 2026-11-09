@@ -1,19 +1,36 @@
+import asyncio
 import json
-
-from app.assistant.outputs import AnswerDraft
-
-TEXT_ID = "answer"
+from collections.abc import AsyncIterator
+from contextlib import suppress
 
 
-def _frame(payload: dict) -> str:
+def answer_event(payload: dict) -> str:
     return f"data: {json.dumps(payload, ensure_ascii=False)}\n\n"
 
 
-def build_answer_events(answer: AnswerDraft) -> list[str]:
-    return [
-        _frame({"type": "start"}),
-        _frame({"type": "text-start", "id": TEXT_ID}),
-        _frame({"type": "text-delta", "id": TEXT_ID, "delta": answer.answer}),
-        _frame({"type": "text-end", "id": TEXT_ID}),
-        _frame({"type": "finish"}),
-    ]
+async def with_heartbeat(
+    events: AsyncIterator[str], interval: float = 15
+) -> AsyncIterator[str]:
+    iterator = events.__aiter__()
+    pending: asyncio.Task[str] | None = None
+    try:
+        while True:
+            if pending is None:
+                pending = asyncio.create_task(anext(iterator))
+            done, _ = await asyncio.wait({pending}, timeout=interval)
+            if not done:
+                yield ": ping\n\n"
+                continue
+            try:
+                event = pending.result()
+            except StopAsyncIteration:
+                pending = None
+                break
+            pending = None
+            yield event
+    finally:
+        if pending is not None:
+            pending.cancel()
+            with suppress(asyncio.CancelledError):
+                await pending
+        await events.aclose()

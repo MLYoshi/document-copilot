@@ -22,9 +22,6 @@ async def get_session() -> AsyncIterator[AsyncSession]:
     try:
         yield session
     finally:
-        # A long LLM call can outlive the pooled connection: the server closes
-        # it while idle, so the closing rollback would raise InterfaceError and
-        # turn an otherwise successful request into a 500. Tolerate it here.
         try:
             await session.close()
         except SQLAlchemyError as exc:

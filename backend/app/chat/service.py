@@ -1,13 +1,17 @@
+from collections.abc import AsyncIterator
 from uuid import UUID
 
+import structlog
 from fastapi import HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.assistant.outputs import AnswerDraft
 from app.chat import orchestrator
 from app.chat.schemas import MessagePublic, ThreadPublic
+from app.chat.streaming import answer_event
 from app.database import chat_messages, chat_threads
 from app.database.session import session_factory
+
+logger = structlog.get_logger()
 
 
 async def create_thread(
@@ -41,37 +45,56 @@ async def _require_thread(
         raise HTTPException(status.HTTP_404_NOT_FOUND, "thread not found")
 
 
-async def answer_in_thread(
+async def stream_answer_in_thread(
     session: AsyncSession,
     *,
     user_id: UUID,
     thread_id: UUID,
     question: str,
-    agent=None,
-) -> AnswerDraft:
+) -> AsyncIterator[str]:
     await _require_thread(session, thread_id, user_id)
-
     await chat_messages.save_user_message(session, thread_id, question)
 
-    draft = await orchestrator.answer_question(
-        session,
-        user_id=user_id,
-        thread_id=thread_id,
-        question=question,
-        agent=agent,
-    )
+    async def events() -> AsyncIterator[str]:
+        answer_parts: list[str] = []
+        draft = None
+        try:
+            async for item in orchestrator.stream_answer(
+                user_id=user_id,
+                thread_id=thread_id,
+                question=question,
+            ):
+                if isinstance(item, str):
+                    answer_parts.append(item)
+                    yield answer_event({"type": "text-delta", "delta": item})
+                else:
+                    draft = item
 
-    # The LLM call above can take tens of seconds; the original session's
-    # connection may be closed by the pooler while idle. Persist the answer
-    # with a fresh session/connection instead of the stale one.
-    async with session_factory() as fresh_session:
-        await chat_messages.save_assistant_turn(
-            fresh_session,
-            thread_id,
-            draft.answer,
-            [(UUID(c.passage_id), c.quote) for c in draft.citations],
-        )
-    return draft
+            if draft is None:
+                raise RuntimeError("The agent did not produce an answer")
+            answer = "".join(answer_parts) or draft.answer
+            if not answer_parts:
+                yield answer_event({"type": "text-delta", "delta": answer})
+            citations = [(UUID(c.passage_id), c.quote) for c in draft.citations]
+            async with session_factory() as fresh_session:
+                await chat_messages.save_assistant_turn(
+                    fresh_session, thread_id, answer, citations
+                )
+            yield answer_event(
+                {
+                    "type": "citations",
+                    "citations": [
+                        {"passage_id": str(passage_id), "ordinal": ordinal, "quote": quote}
+                        for ordinal, (passage_id, quote) in enumerate(citations)
+                    ],
+                }
+            )
+        except Exception as exc:
+            logger.exception("answer_stream_failed", thread_id=str(thread_id), error=str(exc))
+            yield answer_event({"type": "error", "message": str(exc)})
+        yield answer_event({"type": "finish"})
+
+    return events()
 
 
 async def list_messages(

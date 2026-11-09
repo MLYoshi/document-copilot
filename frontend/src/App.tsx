@@ -127,6 +127,8 @@ function ChatPage({ user, onLogout }: { user: User; onLogout: () => void }) {
       ]);
       await api.streamMessage(threadId, text, (delta) => {
         setMessages((current) => current.map((message) => message.id === `${temporaryId}-assistant` ? { ...message, content: message.content + delta } : message));
+      }, (citations) => {
+        setMessages((current) => current.map((message) => message.id === `${temporaryId}-assistant` ? { ...message, citations } : message));
       });
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "发送失败，请重试");
@@ -190,7 +192,7 @@ function ChatPage({ user, onLogout }: { user: User; onLogout: () => void }) {
               <article key={message.id} className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}>
                 <div className={message.role === "user" ? "max-w-[85%] rounded-2xl rounded-br-sm bg-primary px-4 py-3 text-primary-foreground" : "max-w-full flex-1"}>
                   {message.role === "assistant" && <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Copilot</p>}
-                  <p className="whitespace-pre-wrap text-sm leading-7">{message.content || (sending ? "正在检索并生成答案…" : "")}</p>
+                  <p className="whitespace-pre-wrap text-sm leading-7">{message.content || (sending ? "正在生成回答…" : "")}</p>
                   {message.citations.length > 0 && (
                     <details className="mt-3 border-t pt-2 text-xs text-muted-foreground">
                       <summary className="cursor-pointer">查看 {message.citations.length} 条引用</summary>

@@ -7,7 +7,7 @@ export interface Thread { id: string; title: string; created_at: string; updated
 export interface Citation { passage_id: string; ordinal: number; quote: string | null }
 export interface Message { id: string; role: "user" | "assistant"; content: string; created_at: string; citations: Citation[] }
 interface TokenPair { access_token: string; refresh_token: string; token_type: string }
-interface StreamEvent { type: string; delta?: string }
+interface StreamEvent { type: "text-delta" | "citations" | "error" | "finish"; delta?: string; citations?: Citation[]; message?: string }
 
 let accessToken = localStorage.getItem(ACCESS_TOKEN_KEY);
 let refreshToken = localStorage.getItem(REFRESH_TOKEN_KEY);
@@ -94,7 +94,7 @@ export const api = {
   threads: () => request<Thread[]>("/threads"),
   createThread: (title: string) => request<Thread>("/threads", { method: "POST", body: JSON.stringify({ title }) }),
   messages: (threadId: string) => request<Message[]>(`/threads/${threadId}/messages`),
-  streamMessage: async (threadId: string, question: string, onDelta: (text: string) => void) => {
+  streamMessage: async (threadId: string, question: string, onDelta: (text: string) => void, onCitations: (citations: Citation[]) => void) => {
     const response = await authorizedFetch(`/threads/${threadId}/messages/stream`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -117,6 +117,8 @@ export const api = {
         if (!data) continue;
         const event = JSON.parse(data) as StreamEvent;
         if (event.type === "text-delta" && event.delta) onDelta(event.delta);
+        if (event.type === "citations" && event.citations) onCitations(event.citations);
+        if (event.type === "error") throw new Error(event.message ?? "回答生成失败，请重试");
       }
     }
   },

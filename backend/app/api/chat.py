@@ -12,7 +12,7 @@ from app.chat.schemas import (
     SendMessageRequest,
     ThreadPublic,
 )
-from app.chat.streaming import build_answer_events
+from app.chat.streaming import with_heartbeat
 from app.database.session import get_session
 
 router = APIRouter(prefix="/threads", tags=["chat"])
@@ -51,11 +51,14 @@ async def stream_message(
     session: AsyncSession = Depends(get_session),
     current_user=Depends(get_current_user),
 ) -> StreamingResponse:
-    draft = await service.answer_in_thread(
+    events = await service.stream_answer_in_thread(
         session, user_id=current_user.id, thread_id=thread_id, question=body.question
     )
+    await session.close()
     return StreamingResponse(
-        iter(build_answer_events(draft)), media_type="text/event-stream"
+        with_heartbeat(events),
+        media_type="text/event-stream",
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
 

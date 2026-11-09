@@ -1,9 +1,9 @@
 from sqlalchemy import text
-from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.assistant.outputs import SourcePassage
 from app.core.config import settings
 from app.core.embeddings import EmbedFn
+from app.database.session import session_factory
 
 _SUMMARY_SEARCH_SQL = text(
     "SELECT d.id, d.id AS document_id, 0 AS passage_index, "
@@ -37,27 +37,22 @@ def _to_passage(row) -> SourcePassage:
 
 
 class PgVectorRetriever:
-    def __init__(
-        self,
-        session: AsyncSession,
-        embed: EmbedFn,
-        top_k: int | None = None,
-    ) -> None:
-        self.session = session
+    def __init__(self, embed: EmbedFn, top_k: int | None = None) -> None:
         self.embed = embed
         self.top_k = top_k if top_k is not None else settings.retrieval_top_k
 
     async def search(self, query: str) -> list[SourcePassage]:
         """Rank by summary embeddings and return complete original filings."""
         vectors = await self.embed([query])
-        rows = (
-            await self.session.execute(
-                _SUMMARY_SEARCH_SQL,
-                {
-                    "vector": str(list(vectors[0])),
-                    "corpus_owner_email": settings.corpus_owner_email,
-                    "limit": self.top_k,
-                },
-            )
-        ).mappings()
-        return [_to_passage(row) for row in rows]
+        async with session_factory() as session:
+            rows = (
+                await session.execute(
+                    _SUMMARY_SEARCH_SQL,
+                    {
+                        "vector": str(list(vectors[0])),
+                        "corpus_owner_email": settings.corpus_owner_email,
+                        "limit": self.top_k,
+                    },
+                )
+            ).mappings()
+            return [_to_passage(row) for row in rows]
